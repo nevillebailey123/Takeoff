@@ -2,290 +2,276 @@
 
 /*
     TAKEOFF
+    New Zealand VFR Weather Briefing
 
     storage.js
-
-    Handles saving and loading the most recent flight.
+    Saves and restores the most recent flight details
+    using the browser's localStorage.
 */
 
-const STORAGE_KEY = "takeoff-last-flight-v2";
 
 /* ==========================================================
-   SAVE
+   CONSTANTS
+========================================================== */
+
+const STORAGE_KEY =
+    "takeoff-last-flight";
+
+const STORAGE_VERSION =
+    1;
+
+
+/* ==========================================================
+   SAVE FLIGHT
 ========================================================== */
 
 export function saveFlight(flight) {
 
     try {
 
-        localStorage.setItem(
+        const storedFlight = {
 
+            version:
+                STORAGE_VERSION,
+
+            savedAt:
+                new Date().toISOString(),
+
+            departure:
+                cleanText(
+                    flight?.departure
+                ),
+
+            destination:
+                cleanText(
+                    flight?.destination
+                ),
+
+            viaOne:
+                cleanText(
+                    flight?.viaOne
+                ),
+
+            viaTwo:
+                cleanText(
+                    flight?.viaTwo
+                ),
+
+            departureTime:
+                cleanText(
+                    flight?.departureTime
+                ),
+
+            cruiseSpeed:
+                cleanText(
+                    flight?.cruiseSpeed
+                )
+        };
+
+        window.localStorage.setItem(
             STORAGE_KEY,
-
-            JSON.stringify(flight)
-
+            JSON.stringify(
+                storedFlight
+            )
         );
+
+        return true;
 
     } catch (error) {
 
         console.warn(
-            "Unable to save flight.",
+            "Takeoff could not save the flight.",
             error
         );
 
+        return false;
     }
-
 }
 
+
 /* ==========================================================
-   LOAD
+   LOAD FLIGHT
 ========================================================== */
 
 export function loadFlight() {
 
     try {
 
-        const saved = localStorage.getItem(
-            STORAGE_KEY
-        );
+        const storedValue =
+            window.localStorage.getItem(
+                STORAGE_KEY
+            );
 
-        if (!saved) {
+        if (!storedValue) {
 
             return null;
-
         }
 
-        return JSON.parse(saved);
+        const storedFlight =
+            JSON.parse(
+                storedValue
+            );
+
+        if (
+            !storedFlight ||
+            typeof storedFlight !==
+            "object"
+        ) {
+
+            return null;
+        }
+
+        return {
+
+            departure:
+                cleanText(
+                    storedFlight.departure
+                ),
+
+            destination:
+                cleanText(
+                    storedFlight.destination
+                ),
+
+            viaOne:
+                cleanText(
+                    storedFlight.viaOne
+                ),
+
+            viaTwo:
+                cleanText(
+                    storedFlight.viaTwo
+                ),
+
+            departureTime:
+                cleanText(
+                    storedFlight.departureTime
+                ),
+
+            cruiseSpeed:
+                cleanText(
+                    storedFlight.cruiseSpeed
+                ),
+
+            savedAt:
+                cleanText(
+                    storedFlight.savedAt
+                )
+        };
 
     } catch (error) {
 
         console.warn(
-            "Unable to load saved flight.",
+            "Takeoff could not restore the saved flight.",
             error
         );
 
         return null;
-
     }
-
 }
 
+
 /* ==========================================================
-   CLEAR
+   CLEAR FLIGHT
 ========================================================== */
 
 export function clearSavedFlight() {
 
     try {
 
-        localStorage.removeItem(
+        window.localStorage.removeItem(
             STORAGE_KEY
         );
 
-    } catch (error) {
-
-        console.warn(
-            "Unable to clear saved flight.",
-            error
-        );
-
-    }
-
-}
-
-/* ==========================================================
-   GENERIC SETTINGS
-========================================================== */
-
-export function saveSetting(key, value) {
-
-    try {
-
-        localStorage.setItem(
-
-            `takeoff-${key}`,
-
-            JSON.stringify(value)
-
-        );
+        return true;
 
     } catch (error) {
 
         console.warn(
-            "Unable to save setting.",
+            "Takeoff could not clear the saved flight.",
             error
         );
 
+        return false;
     }
-
 }
 
-export function loadSetting(key, defaultValue = null) {
-
-    try {
-
-        const saved = localStorage.getItem(
-            `takeoff-${key}`
-        );
-
-        if (!saved) {
-
-            return defaultValue;
-
-        }
-
-        return JSON.parse(saved);
-
-    } catch (error) {
-
-        console.warn(
-            "Unable to load setting.",
-            error
-        );
-
-        return defaultValue;
-
-    }
-
-}
 
 /* ==========================================================
-   FAVOURITE ROUTES
+   REVERSE SAVED ROUTE
 ========================================================== */
 
-const FAVOURITES_KEY =
-    "takeoff-favourite-routes";
+export function reverseSavedRoute() {
 
-export function loadFavouriteRoutes() {
+    const flight =
+        loadFlight();
 
-    try {
-
-        const saved = localStorage.getItem(
-            FAVOURITES_KEY
-        );
-
-        if (!saved) {
-
-            return [];
-
-        }
-
-        return JSON.parse(saved);
-
-    } catch {
-
-        return [];
-
-    }
-
-}
-
-export function saveFavouriteRoute(route) {
-
-    const routes = loadFavouriteRoutes();
-
-    routes.push(route);
-
-    localStorage.setItem(
-
-        FAVOURITES_KEY,
-
-        JSON.stringify(routes)
-
-    );
-
-}
-
-export function deleteFavouriteRoute(index) {
-
-    const routes = loadFavouriteRoutes();
-
-    routes.splice(index, 1);
-
-    localStorage.setItem(
-
-        FAVOURITES_KEY,
-
-        JSON.stringify(routes)
-
-    );
-
-}
-
-/* ==========================================================
-   CACHE
-========================================================== */
-
-export function saveWeatherCache(key, data) {
-
-    try {
-
-        const cache = {
-
-            timestamp: Date.now(),
-
-            data
-
-        };
-
-        localStorage.setItem(
-
-            `weather-${key}`,
-
-            JSON.stringify(cache)
-
-        );
-
-    } catch {
-
-        /* Ignore */
-
-    }
-
-}
-
-export function loadWeatherCache(
-
-    key,
-
-    maxAgeMinutes = 15
-
-) {
-
-    try {
-
-        const saved = localStorage.getItem(
-
-            `weather-${key}`
-
-        );
-
-        if (!saved) {
-
-            return null;
-
-        }
-
-        const cache = JSON.parse(saved);
-
-        const ageMinutes =
-
-            (Date.now() - cache.timestamp)
-
-            / 60000;
-
-        if (ageMinutes > maxAgeMinutes) {
-
-            return null;
-
-        }
-
-        return cache.data;
-
-    } catch {
+    if (!flight) {
 
         return null;
-
     }
 
+    const reversedFlight = {
+
+        ...flight,
+
+        departure:
+            flight.destination,
+
+        destination:
+            flight.departure,
+
+        viaOne:
+            flight.viaTwo,
+
+        viaTwo:
+            flight.viaOne
+    };
+
+    saveFlight(
+        reversedFlight
+    );
+
+    return reversedFlight;
+}
+
+
+/* ==========================================================
+   CHECK SAVED FLIGHT
+========================================================== */
+
+export function hasSavedFlight() {
+
+    try {
+
+        return Boolean(
+            window.localStorage.getItem(
+                STORAGE_KEY
+            )
+        );
+
+    } catch (error) {
+
+        return false;
+    }
+}
+
+
+/* ==========================================================
+   HELPERS
+========================================================== */
+
+function cleanText(value) {
+
+    if (
+        value === null ||
+        value === undefined
+    ) {
+
+        return "";
+    }
+
+    return String(
+        value
+    ).trim();
 }
