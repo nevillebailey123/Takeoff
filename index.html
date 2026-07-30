@@ -53,7 +53,77 @@ Departure Time
 
 </div>
 
-<button class="primary-button" onclick="getWeather()">
+<button class="primary-button" onclick="getWeather(async function getWeather() {
+
+    const dep = departure.value.trim().toUpperCase();
+    const dest = destination.value.trim().toUpperCase();
+    const alt = altitude.value;
+
+    if (!dep || !dest) {
+        alert("Please enter a departure and destination.");
+        return;
+    }
+
+    const now = new Date();
+
+    document.getElementById("weatherResult").innerHTML = `
+        <div class="decision-card">
+            <span class="decision-label">FLIGHT DECISION</span>
+            <strong>🟠 REVIEW</strong>
+            <p>Waiting for live weather data.</p>
+        </div>
+
+        <div class="weather-gates">
+
+            <article>
+                <div class="gate-dot amber"></div>
+                <div>
+                    <strong>Departure</strong>
+                    <p>${dep}</p>
+                </div>
+            </article>
+
+            <article>
+                <div class="gate-dot amber"></div>
+                <div>
+                    <strong>Destination</strong>
+                    <p>${dest}</p>
+                </div>
+            </article>
+
+            <article>
+                <div class="gate-dot amber"></div>
+                <div>
+                    <strong>Cruise</strong>
+                    <p>${alt || "Not entered"}</p>
+                </div>
+            </article>
+
+        </div>
+
+        <div class="route-summary">
+
+            <div>
+                <span>Status</span>
+                <strong>Awaiting Weather</strong>
+            </div>
+
+            <div>
+                <span>Warnings</span>
+                <strong>None</strong>
+            </div>
+
+            <div>
+                <span>Updated</span>
+                <strong>${now.toLocaleTimeString([], {
+                    hour: '2-digit',
+                    minute: '2-digit'
+                })}</strong>
+            </div>
+
+        </div>
+    `;
+})">
 🌦 Get Weather Briefing
 </button>
 
