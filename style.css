@@ -108,9 +108,7 @@ h1 {
 
 h2 {
     margin-bottom: 18px;
-
     font-size: 21px;
-    letter-spacing: -0.3px;
 }
 
 
@@ -122,7 +120,6 @@ h3 {
 
 .app-badge {
     min-width: 108px;
-
     padding: 11px 16px;
 
     background: var(--panel-light);
@@ -135,7 +132,6 @@ h3 {
 
 .app-badge span {
     display: block;
-
     margin-bottom: 3px;
 
     color: #9fc6ff;
@@ -161,8 +157,7 @@ h3 {
     border: 1px solid var(--border);
     border-radius: 20px;
 
-    box-shadow:
-        0 16px 40px rgba(0, 0, 0, 0.14);
+    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.14);
 }
 
 
@@ -181,11 +176,10 @@ h3 {
 }
 
 
-/* AIRPORT DATABASE */
+/* DATABASE BADGE */
 
 .database-badge {
     flex-shrink: 0;
-
     max-width: 190px;
 
     padding: 7px 10px;
@@ -226,7 +220,6 @@ h3 {
 
 .field label {
     display: block;
-
     margin-bottom: 7px;
 
     color: var(--muted-light);
@@ -254,9 +247,7 @@ h3 {
 
 .field input:focus {
     border-color: #67a9ff;
-
-    box-shadow:
-        0 0 0 3px rgba(62, 145, 255, 0.18);
+    box-shadow: 0 0 0 3px rgba(62, 145, 255, 0.18);
 }
 
 
@@ -310,7 +301,6 @@ button {
     border-radius: 13px;
 
     cursor: pointer;
-
     font-weight: 800;
 }
 
@@ -330,7 +320,6 @@ button:disabled {
 .secondary-button {
     color: #d7e8fa;
     background: var(--blue-dark);
-
     border: 1px solid #28506e;
 }
 
@@ -359,18 +348,15 @@ button:active {
 
 .status-strip div {
     min-width: 0;
-
     padding: 15px 12px;
 
     background: var(--panel);
-
     text-align: center;
 }
 
 
 .status-strip span {
     display: block;
-
     margin-bottom: 5px;
 
     color: #819bb5;
@@ -384,7 +370,6 @@ button:active {
 
 .status-strip strong {
     display: block;
-
     overflow: hidden;
 
     font-size: 13px;
@@ -478,7 +463,6 @@ button:active {
 
 .risk-detail span {
     display: block;
-
     margin-bottom: 5px;
 
     color: #7894ad;
@@ -525,7 +509,6 @@ button:active {
 
 .summary-row strong {
     max-width: 62%;
-
     text-align: right;
 }
 
@@ -544,8 +527,6 @@ button:active {
 
 
 #routeMap {
-    display: block;
-
     width: 100%;
     height: 390px;
     min-height: 390px;
@@ -558,12 +539,22 @@ button:active {
 }
 
 
+.map-help {
+    margin-top: 12px;
+
+    color: #91a8bd;
+
+    font-size: 11px;
+    line-height: 1.4;
+}
+
+
 .map-legend {
     display: flex;
     flex-wrap: wrap;
     gap: 14px;
 
-    margin-top: 14px;
+    margin-top: 12px;
 
     color: #91a8bd;
 
@@ -611,8 +602,7 @@ button:active {
     border: 4px solid #348cff;
     border-radius: 50%;
 
-    box-shadow:
-        0 3px 12px rgba(0, 0, 0, 0.45);
+    box-shadow: 0 3px 12px rgba(0, 0, 0, 0.45);
 }
 
 
@@ -621,16 +611,17 @@ button:active {
     align-items: center;
     justify-content: center;
 
-    width: 28px;
-    height: 28px;
+    min-width: 34px;
+    height: 34px;
+
+    padding: 0 5px;
 
     color: #071525;
 
     border: 3px solid #ffffff;
-    border-radius: 50%;
+    border-radius: 18px;
 
-    box-shadow:
-        0 3px 12px rgba(0, 0, 0, 0.5);
+    box-shadow: 0 3px 12px rgba(0, 0, 0, 0.5);
 
     font-size: 11px;
     font-weight: 900;
@@ -661,73 +652,12 @@ button:active {
 
 
 .leaflet-popup-content {
-    line-height: 1.5;
+    line-height: 1.55;
 }
 
 
 .leaflet-control-attribution {
     font-size: 9px;
-}
-
-
-/* CLOUD THRESHOLDS */
-
-.cloud-thresholds {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 9px;
-
-    margin-bottom: 18px;
-}
-
-
-.cloud-thresholds > div {
-    padding: 12px 8px;
-
-    background: var(--panel-dark);
-    border: 1px solid #213e57;
-    border-radius: 12px;
-
-    text-align: center;
-}
-
-
-.cloud-thresholds span,
-.cloud-thresholds strong,
-.cloud-thresholds small {
-    display: block;
-}
-
-
-.cloud-thresholds span {
-    margin-bottom: 4px;
-}
-
-
-.cloud-thresholds strong {
-    margin-bottom: 3px;
-    font-size: 13px;
-}
-
-
-.cloud-thresholds small {
-    color: #7f99b0;
-    font-size: 9px;
-}
-
-
-.threshold-good {
-    border-bottom: 3px solid var(--green) !important;
-}
-
-
-.threshold-review {
-    border-bottom: 3px solid var(--orange) !important;
-}
-
-
-.threshold-high {
-    border-bottom: 3px solid var(--red) !important;
 }
 
 
@@ -825,7 +755,7 @@ button:active {
 
 
 .route-weather-card p {
-    margin-top: 6px;
+    margin-top: 7px;
 
     color: #b5c7d7;
 
@@ -861,7 +791,6 @@ button:active {
 
 .weather-metric span {
     display: block;
-
     margin-bottom: 3px;
 
     color: #7894aa;
@@ -986,7 +915,6 @@ button:active {
 
 .disclaimer strong {
     display: block;
-
     margin-bottom: 5px;
 
     color: #abc0d4;
@@ -1042,7 +970,6 @@ button:active {
 
     .app-badge {
         min-width: 92px;
-
         padding-left: 10px;
         padding-right: 10px;
     }
@@ -1055,11 +982,6 @@ button:active {
 
     .database-badge {
         max-width: 130px;
-    }
-
-
-    .cloud-thresholds {
-        grid-template-columns: 1fr;
     }
 
 
