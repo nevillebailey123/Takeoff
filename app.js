@@ -1,163 +1,103 @@
-// TAKEOFF v1.3
+async function getWeather() {
 
-const departure = document.getElementById("departure");
-const destination = document.getElementById("destination");
-const altitude = document.getElementById("altitude");
-const departureTime = document.getElementById("departureTime");
+    const dep = departure.value.trim().toUpperCase();
+    const dest = destination.value.trim().toUpperCase();
 
-const weatherResult = document.getElementById("weatherResult");
-
-const aerodromes = {
-
-    NZAA:{name:"Auckland",lat:-37.0082,lon:174.7850},
-    NZAR:{name:"Ardmore",lat:-37.0297,lon:174.9733},
-    NZCH:{name:"Christchurch",lat:-43.4894,lon:172.5322},
-    NZDN:{name:"Dunedin",lat:-45.9281,lon:170.1983},
-    NZHK:{name:"Hokitika",lat:-42.7136,lon:170.9853},
-    NZHN:{name:"Hamilton",lat:-37.8667,lon:175.3321},
-    NZHT:{name:"Haast",lat:-43.8650,lon:169.0410},
-    NZMF:{name:"Milford",lat:-44.6733,lon:167.9233},
-    NZNS:{name:"Nelson",lat:-41.2983,lon:173.2211},
-    NZNV:{name:"Invercargill",lat:-46.4124,lon:168.3130},
-    NZPM:{name:"Palmerston North",lat:-40.3206,lon:175.6170},
-    NZPP:{name:"Paraparaumu",lat:-40.9047,lon:174.9890},
-    NZQN:{name:"Queenstown",lat:-45.0211,lon:168.7390},
-    NZRO:{name:"Rotorua",lat:-38.1092,lon:176.3172},
-    NZTG:{name:"Tauranga",lat:-37.6719,lon:176.1960},
-    NZTU:{name:"Gisborne",lat:-38.7397,lon:177.9783},
-    NZWB:{name:"Woodbourne",lat:-41.5183,lon:173.8700},
-    NZWN:{name:"Wellington",lat:-41.3272,lon:174.8053},
-    NZWR:{name:"Rangiora",lat:-43.3067,lon:172.3817}
-
-};
-
-function updateSummary(){
-
-    document.getElementById("departureSummary").textContent =
-        departure.value.toUpperCase() || "Not entered";
-
-    document.getElementById("destinationSummary").textContent =
-        destination.value.toUpperCase() || "Not entered";
-
-    document.getElementById("altitudeSummary").textContent =
-        altitude.value ? altitude.value + " ft" : "Not entered";
-
-}
-
-function saveFlight(){
-
-    localStorage.setItem("lastFlight",JSON.stringify({
-
-        departure:departure.value.toUpperCase(),
-        destination:destination.value.toUpperCase(),
-        altitude:altitude.value,
-        departureTime:departureTime.value
-
-    }));
-
-    updateSummary();
-
-}
-
-function loadFlight(){
-
-    const saved = localStorage.getItem("lastFlight");
-
-    if(!saved) return;
-
-    const flight = JSON.parse(saved);
-
-    departure.value = flight.departure || "";
-    destination.value = flight.destination || "";
-    altitude.value = flight.altitude || "";
-    departureTime.value = flight.departureTime || "";
-
-    updateSummary();
-
-}
-
-function reverseRoute(){
-
-    const temp = departure.value;
-
-    departure.value = destination.value;
-    destination.value = temp;
-
-    saveFlight();
-
-}
-
-async function getWeather(){
-
-    const code = departure.value.trim().toUpperCase();
-
-    if(!aerodromes[code]){
-
+    if (!aerodromes[dep]) {
         weatherResult.innerHTML =
-            "<p>Please enter a supported departure aerodrome.</p>";
-
+            "<p>Please enter a valid departure aerodrome.</p>";
         return;
-
     }
 
-    const airport = aerodromes[code];
+    if (!aerodromes[dest]) {
+        weatherResult.innerHTML =
+            "<p>Please enter a valid destination aerodrome.</p>";
+        return;
+    }
 
-    weatherResult.innerHTML="<p>Loading live weather...</p>";
+    weatherResult.innerHTML = "<p>Loading live weather...</p>";
 
-    try{
+    try {
 
-        const url =
-`https://api.open-meteo.com/v1/forecast?latitude=${airport.lat}&longitude=${airport.lon}&current=temperature_2m,wind_speed_10m,wind_direction_10m,cloud_cover`;
+        const depAirport = aerodromes[dep];
+        const destAirport = aerodromes[dest];
 
-        const response = await fetch(url);
+        const depURL =
+`https://api.open-meteo.com/v1/forecast?latitude=${depAirport.lat}&longitude=${depAirport.lon}&current=temperature_2m,wind_speed_10m,wind_direction_10m,cloud_cover`;
 
-        const data = await response.json();
+        const destURL =
+`https://api.open-meteo.com/v1/forecast?latitude=${destAirport.lat}&longitude=${destAirport.lon}&current=temperature_2m,wind_speed_10m,wind_direction_10m,cloud_cover`;
 
-        const w = data.current;
+        const depResponse = await fetch(depURL);
+        const destResponse = await fetch(destURL);
 
-        document.getElementById("weatherBadge").textContent="LIVE";
-        document.getElementById("statusValue").textContent="Weather Loaded";
-        document.getElementById("warningsValue").textContent="None";
-        document.getElementById("updatedValue").textContent=
+        const depData = await depResponse.json();
+        const destData = await destResponse.json();
+
+        const d = depData.current;
+        const a = destData.current;
+
+        document.getElementById("weatherBadge").textContent = "LIVE";
+        document.getElementById("statusValue").textContent = "Weather Loaded";
+        document.getElementById("updatedValue").textContent =
             new Date().toLocaleTimeString();
 
-        document.getElementById("decisionTitle").textContent="🟢 GO";
-        document.getElementById("decisionMessage").textContent=
-            "Basic weather looks suitable. Complete your normal pre-flight planning.";
+        let decision = "🟢 GO";
+        let message = "Weather appears suitable for VFR. Continue normal planning.";
 
-        weatherResult.innerHTML=`
+        if (
+            d.wind_speed_10m > 35 ||
+            a.wind_speed_10m > 35 ||
+            d.cloud_cover > 90 ||
+            a.cloud_cover > 90
+        ) {
+            decision = "🔴 NO GO";
+            message = "Strong winds or extensive cloud. Review carefully.";
+            document.getElementById("warningsValue").textContent = "Weather";
+        }
+        else if (
+            d.wind_speed_10m > 25 ||
+            a.wind_speed_10m > 25 ||
+            d.cloud_cover > 70 ||
+            a.cloud_cover > 70
+        ) {
+            decision = "🟠 REVIEW";
+            message = "Conditions are becoming marginal.";
+            document.getElementById("warningsValue").textContent = "Review";
+        }
+        else {
+            document.getElementById("warningsValue").textContent = "None";
+        }
 
-<h3>${airport.name}</h3>
+        document.getElementById("decisionTitle").textContent = decision;
+        document.getElementById("decisionMessage").textContent = message;
 
-<p><strong>Temperature:</strong> ${w.temperature_2m}°C</p>
+        weatherResult.innerHTML = `
 
-<p><strong>Wind:</strong> ${w.wind_speed_10m} km/h (${w.wind_direction_10m}°)</p>
+<h3>Departure (${dep})</h3>
 
-<p><strong>Cloud Cover:</strong> ${w.cloud_cover}%</p>
+<p>🌡 ${d.temperature_2m}°C</p>
+<p>💨 ${d.wind_speed_10m} km/h @ ${d.wind_direction_10m}°</p>
+<p>☁️ ${d.cloud_cover}% cloud</p>
+
+<hr>
+
+<h3>Destination (${dest})</h3>
+
+<p>🌡 ${a.temperature_2m}°C</p>
+<p>💨 ${a.wind_speed_10m} km/h @ ${a.wind_direction_10m}°</p>
+<p>☁️ ${a.cloud_cover}% cloud</p>
 
 `;
 
     }
+    catch (err) {
 
-    catch(error){
+        document.getElementById("weatherBadge").textContent = "ERROR";
 
-        document.getElementById("weatherBadge").textContent="ERROR";
-
-        weatherResult.innerHTML=
+        weatherResult.innerHTML =
             "<p>Unable to retrieve weather.</p>";
 
     }
 
 }
-
-document.getElementById("weatherButton").addEventListener("click",getWeather);
-document.getElementById("reverseButton").addEventListener("click",reverseRoute);
-document.getElementById("saveButton").addEventListener("click",saveFlight);
-
-document.querySelectorAll("input").forEach(input=>{
-
-    input.addEventListener("input",saveFlight);
-
-});
-
-loadFlight();
