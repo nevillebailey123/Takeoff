@@ -1,192 +1,42 @@
 "use strict";
 
 /*
-    TAKEOFF v2.0
+    TAKEOFF
+
+    General New Zealand route-weather prototype.
 
     Features:
-    - Downloads New Zealand aerodromes from OurAirports
-    - Includes large, medium and small aerodromes
-    - Includes private strips recorded in that database
-    - Search by identifier or aerodrome name
-    - Route distance and initial true track
-    - Estimated flight time
+    - New Zealand aerodrome database from OurAirports
+    - Departure and destination search
+    - Route distance and bearing
     - Leaflet route map
-    - Weather samples along route
+    - Open-Meteo route-weather sampling
     - Estimated cloud base from temperature/dew-point spread
-    - Cloud-base red threshold below 1,000 ft AGL
+    - Map markers show cloud base in hundreds of feet
 
-    Cloud-base estimate:
-    (Temperature °C - Dew point °C) × 400 feet
+    Marker examples:
+    35 = 3,500 ft AGL
+    08 = 800 ft AGL
+    100+ = 10,000 ft AGL or higher
 
-    This is an approximation, not an observed aviation ceiling.
+    Cloud-base colours:
+    Green: 3,000 ft AGL or higher
+    Orange: 1,000–2,999 ft AGL
+    Red: below 1,000 ft AGL
+
+    Cloud base is estimated using:
+    temperature/dew-point spread × 400 ft
+
+    This is not an official aviation weather briefing.
 */
 
-
-const $ = (id) =>
-    document.getElementById(id);
-
-
-/* OURAIRPORTS DATA */
 
 const AIRPORT_DATA_URL =
     "https://davidmegginson.github.io/ourairports-data/airports.csv";
 
 
-/*
-    These are used only if the complete online aerodrome
-    database cannot be downloaded.
-*/
+const $ = (id) => document.getElementById(id);
 
-const fallbackAerodromes = [
-
-    {
-        ident: "NZAA",
-        name: "Auckland Airport",
-        type: "large_airport",
-        lat: -37.0082,
-        lon: 174.7850,
-        elevationFt: 23
-    },
-
-    {
-        ident: "NZAR",
-        name: "Ardmore Airport",
-        type: "small_airport",
-        lat: -37.0297,
-        lon: 174.9733,
-        elevationFt: 111
-    },
-
-    {
-        ident: "NZAS",
-        name: "Ashburton Aerodrome",
-        type: "small_airport",
-        lat: -43.9033,
-        lon: 171.7967,
-        elevationFt: 298
-    },
-
-    {
-        ident: "NZCH",
-        name: "Christchurch International Airport",
-        type: "large_airport",
-        lat: -43.4894,
-        lon: 172.5322,
-        elevationFt: 123
-    },
-
-    {
-        ident: "NZDN",
-        name: "Dunedin Airport",
-        type: "medium_airport",
-        lat: -45.9281,
-        lon: 170.1983,
-        elevationFt: 4
-    },
-
-    {
-        ident: "NZHK",
-        name: "Hokitika Airfield",
-        type: "medium_airport",
-        lat: -42.7136,
-        lon: 170.9853,
-        elevationFt: 146
-    },
-
-    {
-        ident: "NZHN",
-        name: "Hamilton Airport",
-        type: "medium_airport",
-        lat: -37.8667,
-        lon: 175.3321,
-        elevationFt: 172
-    },
-
-    {
-        ident: "NZHT",
-        name: "Haast Aerodrome",
-        type: "small_airport",
-        lat: -43.8650,
-        lon: 169.0410,
-        elevationFt: 19
-    },
-
-    {
-        ident: "NZMF",
-        name: "Milford Sound Airport",
-        type: "small_airport",
-        lat: -44.6733,
-        lon: 167.9233,
-        elevationFt: 10
-    },
-
-    {
-        ident: "NZNS",
-        name: "Nelson Airport",
-        type: "medium_airport",
-        lat: -41.2983,
-        lon: 173.2211,
-        elevationFt: 17
-    },
-
-    {
-        ident: "NZNV",
-        name: "Invercargill Airport",
-        type: "medium_airport",
-        lat: -46.4124,
-        lon: 168.3130,
-        elevationFt: 5
-    },
-
-    {
-        ident: "NZQN",
-        name: "Queenstown Airport",
-        type: "medium_airport",
-        lat: -45.0211,
-        lon: 168.7390,
-        elevationFt: 1171
-    },
-
-    {
-        ident: "NZTG",
-        name: "Tauranga Airport",
-        type: "medium_airport",
-        lat: -37.6719,
-        lon: 176.1960,
-        elevationFt: 13
-    },
-
-    {
-        ident: "NZTU",
-        name: "Timaru Airport",
-        type: "medium_airport",
-        lat: -44.3028,
-        lon: 171.2253,
-        elevationFt: 89
-    },
-
-    {
-        ident: "NZWF",
-        name: "Wānaka Airport",
-        type: "small_airport",
-        lat: -44.7222,
-        lon: 169.2456,
-        elevationFt: 1142
-    },
-
-    {
-        ident: "NZWN",
-        name: "Wellington International Airport",
-        type: "large_airport",
-        lat: -41.3272,
-        lon: 174.8053,
-        elevationFt: 42
-    }
-
-];
-
-
-/* APPLICATION DATA */
 
 let aerodromes = [];
 let airportLookup = new Map();
@@ -207,65 +57,188 @@ let destinationMarker;
 let routeWeatherMarkers = [];
 
 
-/* BASIC HELPERS */
+/* FALLBACK AERODROMES */
+
+const fallbackAerodromes = [
+    {
+        ident: "NZAA",
+        name: "Auckland Airport",
+        type: "large_airport",
+        lat: -37.0082,
+        lon: 174.7850,
+        elevationFt: 23
+    },
+    {
+        ident: "NZAR",
+        name: "Ardmore Airport",
+        type: "small_airport",
+        lat: -37.0297,
+        lon: 174.9733,
+        elevationFt: 111
+    },
+    {
+        ident: "NZAS",
+        name: "Ashburton Aerodrome",
+        type: "small_airport",
+        lat: -43.9033,
+        lon: 171.7967,
+        elevationFt: 298
+    },
+    {
+        ident: "NZCH",
+        name: "Christchurch International Airport",
+        type: "large_airport",
+        lat: -43.4894,
+        lon: 172.5322,
+        elevationFt: 123
+    },
+    {
+        ident: "NZDN",
+        name: "Dunedin Airport",
+        type: "medium_airport",
+        lat: -45.9281,
+        lon: 170.1983,
+        elevationFt: 4
+    },
+    {
+        ident: "NZHK",
+        name: "Hokitika Airport",
+        type: "medium_airport",
+        lat: -42.7136,
+        lon: 170.9853,
+        elevationFt: 146
+    },
+    {
+        ident: "NZHN",
+        name: "Hamilton Airport",
+        type: "medium_airport",
+        lat: -37.8667,
+        lon: 175.3321,
+        elevationFt: 172
+    },
+    {
+        ident: "NZHT",
+        name: "Haast Aerodrome",
+        type: "small_airport",
+        lat: -43.8650,
+        lon: 169.0410,
+        elevationFt: 19
+    },
+    {
+        ident: "NZMF",
+        name: "Milford Sound Airport",
+        type: "small_airport",
+        lat: -44.6733,
+        lon: 167.9233,
+        elevationFt: 10
+    },
+    {
+        ident: "NZNS",
+        name: "Nelson Airport",
+        type: "medium_airport",
+        lat: -41.2983,
+        lon: 173.2211,
+        elevationFt: 17
+    },
+    {
+        ident: "NZNV",
+        name: "Invercargill Airport",
+        type: "medium_airport",
+        lat: -46.4124,
+        lon: 168.3130,
+        elevationFt: 5
+    },
+    {
+        ident: "NZQN",
+        name: "Queenstown Airport",
+        type: "medium_airport",
+        lat: -45.0211,
+        lon: 168.7390,
+        elevationFt: 1171
+    },
+    {
+        ident: "NZTG",
+        name: "Tauranga Airport",
+        type: "medium_airport",
+        lat: -37.6719,
+        lon: 176.1960,
+        elevationFt: 13
+    },
+    {
+        ident: "NZTU",
+        name: "Timaru Airport",
+        type: "medium_airport",
+        lat: -44.3028,
+        lon: 171.2253,
+        elevationFt: 89
+    },
+    {
+        ident: "NZWF",
+        name: "Wānaka Airport",
+        type: "small_airport",
+        lat: -44.7222,
+        lon: 169.2456,
+        elevationFt: 1142
+    },
+    {
+        ident: "NZWN",
+        name: "Wellington International Airport",
+        type: "large_airport",
+        lat: -41.3272,
+        lon: 174.8053,
+        elevationFt: 42
+    }
+];
+
+
+/* GENERAL HELPERS */
 
 function normaliseText(value) {
-
     return String(value || "")
         .trim()
         .toUpperCase();
-
-}
-
-
-function setText(id, value) {
-
-    const element = $(id);
-
-    if (element) {
-        element.textContent = value;
-    }
-
-}
-
-
-function setClass(id, className) {
-
-    const element = $(id);
-
-    if (element) {
-        element.className = className;
-    }
-
 }
 
 
 function safeNumber(value, fallback = 0) {
-
     const number = Number(value);
 
     return Number.isFinite(number)
         ? number
         : fallback;
+}
 
+
+function setText(id, value) {
+    const element = $(id);
+
+    if (element) {
+        element.textContent = value;
+    }
+}
+
+
+function setClass(id, className) {
+    const element = $(id);
+
+    if (element) {
+        element.className = className;
+    }
 }
 
 
 function escapeHtml(value) {
-
     return String(value || "")
         .replaceAll("&", "&amp;")
         .replaceAll("<", "&lt;")
         .replaceAll(">", "&gt;")
         .replaceAll('"', "&quot;")
         .replaceAll("'", "&#039;");
-
 }
 
 
 function formatAirportType(type) {
-
-    const names = {
+    const labels = {
         large_airport: "Large airport",
         medium_airport: "Medium airport",
         small_airport: "Small aerodrome",
@@ -274,186 +247,88 @@ function formatAirportType(type) {
         balloonport: "Balloon port"
     };
 
-    return names[type] || "Aerodrome";
-
+    return labels[type] || "Aerodrome";
 }
 
 
-/* CSV PARSER */
+/* CSV */
 
 function parseCsv(text) {
-
     const rows = [];
 
     let row = [];
     let field = "";
     let insideQuotes = false;
 
-    for (
-        let index = 0;
-        index < text.length;
-        index += 1
-    ) {
-
+    for (let index = 0; index < text.length; index += 1) {
         const character = text[index];
 
         if (insideQuotes) {
-
             if (
                 character === '"' &&
                 text[index + 1] === '"'
             ) {
-
                 field += '"';
                 index += 1;
-
             } else if (character === '"') {
-
                 insideQuotes = false;
-
             } else {
-
                 field += character;
-
             }
 
-        } else if (character === '"') {
+            continue;
+        }
 
+        if (character === '"') {
             insideQuotes = true;
-
         } else if (character === ",") {
-
             row.push(field);
             field = "";
-
         } else if (character === "\n") {
-
             row.push(field);
 
-            if (
-                row.length > 1 ||
-                row[0] !== ""
-            ) {
+            if (row.length > 1 || row[0] !== "") {
                 rows.push(row);
             }
 
             row = [];
             field = "";
-
         } else if (character !== "\r") {
-
             field += character;
-
         }
-
     }
 
-    if (
-        field.length > 0 ||
-        row.length > 0
-    ) {
-
+    if (field.length > 0 || row.length > 0) {
         row.push(field);
         rows.push(row);
-
     }
 
     return rows;
-
 }
 
 
 function rowsToObjects(rows) {
-
     if (rows.length < 2) {
         return [];
     }
 
     const headings = rows[0];
 
-    return rows
-        .slice(1)
-        .map((row) => {
+    return rows.slice(1).map((row) => {
+        const result = {};
 
-            const object = {};
-
-            headings.forEach(
-                (heading, index) => {
-
-                    object[heading] =
-                        row[index] || "";
-
-                }
-            );
-
-            return object;
-
+        headings.forEach((heading, index) => {
+            result[heading] = row[index] || "";
         });
 
+        return result;
+    });
 }
 
 
-/* AIRPORT DATABASE */
-
-function buildAirportObject(record) {
-
-    const ident =
-        record.ident ||
-        record.gps_code ||
-        record.local_code ||
-        record.iata_code;
-
-    return {
-
-        ident:
-            normaliseText(ident),
-
-        gpsCode:
-            normaliseText(record.gps_code),
-
-        localCode:
-            normaliseText(record.local_code),
-
-        iataCode:
-            normaliseText(record.iata_code),
-
-        name:
-            record.name || "Unnamed aerodrome",
-
-        municipality:
-            record.municipality || "",
-
-        region:
-            record.iso_region || "",
-
-        type:
-            record.type || "small_airport",
-
-        lat:
-            safeNumber(
-                record.latitude_deg,
-                NaN
-            ),
-
-        lon:
-            safeNumber(
-                record.longitude_deg,
-                NaN
-            ),
-
-        elevationFt:
-            safeNumber(
-                record.elevation_ft,
-                0
-            )
-
-    };
-
-}
-
+/* AERODROME DATABASE */
 
 function isUsableNewZealandAirport(record) {
-
     const activeTypes = [
         "large_airport",
         "medium_airport",
@@ -465,95 +340,76 @@ function isUsableNewZealandAirport(record) {
 
     return (
         record.iso_country === "NZ" &&
-        activeTypes.includes(record.type) &&
-        record.type !== "closed"
+        activeTypes.includes(record.type)
     );
-
 }
 
 
-function registerLookupValue(
-    key,
-    airport
-) {
+function buildAirportObject(record) {
+    const ident =
+        record.ident ||
+        record.gps_code ||
+        record.local_code ||
+        record.iata_code;
 
-    const normalised =
-        normaliseText(key);
+    return {
+        ident: normaliseText(ident),
+        gpsCode: normaliseText(record.gps_code),
+        localCode: normaliseText(record.local_code),
+        iataCode: normaliseText(record.iata_code),
+        name: record.name || "Unnamed aerodrome",
+        municipality: record.municipality || "",
+        region: record.iso_region || "",
+        type: record.type || "small_airport",
+        lat: safeNumber(record.latitude_deg, NaN),
+        lon: safeNumber(record.longitude_deg, NaN),
+        elevationFt: safeNumber(record.elevation_ft, 0)
+    };
+}
+
+
+function registerAirportLookup(key, airport) {
+    const normalised = normaliseText(key);
 
     if (
         normalised &&
         !airportLookup.has(normalised)
     ) {
-
-        airportLookup.set(
-            normalised,
-            airport
-        );
-
+        airportLookup.set(normalised, airport);
     }
-
 }
 
 
 function buildAirportLookup() {
-
     airportLookup = new Map();
 
     aerodromes.forEach((airport) => {
+        registerAirportLookup(airport.ident, airport);
+        registerAirportLookup(airport.gpsCode, airport);
+        registerAirportLookup(airport.localCode, airport);
+        registerAirportLookup(airport.iataCode, airport);
+        registerAirportLookup(airport.name, airport);
 
-        registerLookupValue(
-            airport.ident,
-            airport
-        );
-
-        registerLookupValue(
-            airport.gpsCode,
-            airport
-        );
-
-        registerLookupValue(
-            airport.localCode,
-            airport
-        );
-
-        registerLookupValue(
-            airport.iataCode,
-            airport
-        );
-
-        registerLookupValue(
-            airport.name,
-            airport
-        );
-
-        registerLookupValue(
+        registerAirportLookup(
             `${airport.ident} ${airport.name}`,
             airport
         );
 
-        registerLookupValue(
+        registerAirportLookup(
             `${airport.name} ${airport.ident}`,
             airport
         );
-
     });
-
 }
 
 
 function airportDisplayValue(airport) {
-
-    return (
-        `${airport.ident} · ${airport.name}`
-    );
-
+    return `${airport.ident} · ${airport.name}`;
 }
 
 
 function populateAerodromeList() {
-
-    const datalist =
-        $("aerodromeList");
+    const datalist = $("aerodromeList");
 
     if (!datalist) {
         return;
@@ -561,177 +417,124 @@ function populateAerodromeList() {
 
     datalist.innerHTML = "";
 
-    const fragment =
-        document.createDocumentFragment();
+    const fragment = document.createDocumentFragment();
 
     aerodromes.forEach((airport) => {
+        const option = document.createElement("option");
 
-        const option =
-            document.createElement("option");
+        option.value = airportDisplayValue(airport);
 
-        option.value =
-            airportDisplayValue(airport);
-
-        const location =
-            airport.municipality
-                ? ` · ${airport.municipality}`
-                : "";
+        const location = airport.municipality
+            ? ` · ${airport.municipality}`
+            : "";
 
         option.label =
             `${formatAirportType(airport.type)}${location}`;
 
         fragment.appendChild(option);
-
     });
 
     datalist.appendChild(fragment);
-
 }
 
 
 function resolveAirport(value) {
-
-    const query =
-        normaliseText(value);
+    const query = normaliseText(value);
 
     if (!query) {
         return null;
     }
 
     if (airportLookup.has(query)) {
-
         return airportLookup.get(query);
-
     }
 
-    const codeFromDisplay =
-        query.split("·")[0].trim();
+    const displayCode = query.split("·")[0].trim();
 
     if (
-        codeFromDisplay &&
-        airportLookup.has(codeFromDisplay)
+        displayCode &&
+        airportLookup.has(displayCode)
     ) {
-
-        return airportLookup.get(
-            codeFromDisplay
-        );
-
+        return airportLookup.get(displayCode);
     }
 
-    const exactName =
-        aerodromes.find(
-            (airport) =>
-                normaliseText(airport.name) ===
-                query
-        );
+    const exactName = aerodromes.find((airport) =>
+        normaliseText(airport.name) === query
+    );
 
     if (exactName) {
         return exactName;
     }
 
-    const startsWithMatch =
-        aerodromes.find((airport) => {
+    const beginsWith = aerodromes.find((airport) => {
+        const name = normaliseText(airport.name);
+        const town = normaliseText(airport.municipality);
 
-            const name =
-                normaliseText(airport.name);
+        return (
+            airport.ident.startsWith(query) ||
+            name.startsWith(query) ||
+            town === query
+        );
+    });
 
-            const municipality =
-                normaliseText(
-                    airport.municipality
-                );
-
-            return (
-                name.startsWith(query) ||
-                municipality === query ||
-                airport.ident.startsWith(query)
-            );
-
-        });
-
-    if (startsWithMatch) {
-        return startsWithMatch;
+    if (beginsWith) {
+        return beginsWith;
     }
 
     return aerodromes.find((airport) => {
-
-        const searchable = normaliseText(
-            [
-                airport.ident,
-                airport.gpsCode,
-                airport.localCode,
-                airport.iataCode,
-                airport.name,
-                airport.municipality
-            ].join(" ")
-        );
+        const searchable = normaliseText([
+            airport.ident,
+            airport.gpsCode,
+            airport.localCode,
+            airport.iataCode,
+            airport.name,
+            airport.municipality
+        ].join(" "));
 
         return searchable.includes(query);
-
     }) || null;
-
 }
 
 
 async function loadAerodromeDatabase() {
-
     setText(
         "airportDatabaseStatus",
         "Loading aerodromes"
     );
 
     try {
-
-        const response =
-            await fetch(
-                AIRPORT_DATA_URL,
-                {
-                    cache: "no-store"
-                }
-            );
+        const response = await fetch(
+            AIRPORT_DATA_URL,
+            {
+                cache: "no-store"
+            }
+        );
 
         if (!response.ok) {
-
             throw new Error(
-                `Aerodrome database returned ` +
-                `${response.status}`
+                `Aerodrome database returned ${response.status}`
             );
-
         }
 
-        const csvText =
-            await response.text();
+        const csvText = await response.text();
+        const records = rowsToObjects(parseCsv(csvText));
 
-        const rows =
-            parseCsv(csvText);
-
-        const records =
-            rowsToObjects(rows);
-
-        aerodromes =
-            records
-                .filter(
-                    isUsableNewZealandAirport
-                )
-                .map(
-                    buildAirportObject
-                )
-                .filter(
-                    (airport) =>
-                        airport.ident &&
-                        Number.isFinite(airport.lat) &&
-                        Number.isFinite(airport.lon)
-                )
-                .sort(
-                    (a, b) =>
-                        a.name.localeCompare(b.name)
-                );
-
-        if (aerodromes.length < 20) {
-
-            throw new Error(
-                "Too few New Zealand aerodromes were returned"
+        aerodromes = records
+            .filter(isUsableNewZealandAirport)
+            .map(buildAirportObject)
+            .filter((airport) =>
+                airport.ident &&
+                Number.isFinite(airport.lat) &&
+                Number.isFinite(airport.lon)
+            )
+            .sort((a, b) =>
+                a.name.localeCompare(b.name)
             );
 
+        if (aerodromes.length < 20) {
+            throw new Error(
+                "Aerodrome database returned too few locations"
+            );
         }
 
         buildAirportLookup();
@@ -747,24 +550,17 @@ async function loadAerodromeDatabase() {
             "database-badge loaded"
         );
 
-        setText(
-            "statusValue",
-            "Ready"
-        );
-
+        setText("statusValue", "Ready");
     } catch (error) {
-
         console.warn(
-            "Using fallback aerodrome database",
+            "Using fallback aerodrome list",
             error
         );
 
-        aerodromes = [
-            ...fallbackAerodromes
-        ].sort(
-            (a, b) =>
+        aerodromes = [...fallbackAerodromes]
+            .sort((a, b) =>
                 a.name.localeCompare(b.name)
-        );
+            );
 
         buildAirportLookup();
         populateAerodromeList();
@@ -783,53 +579,38 @@ async function loadAerodromeDatabase() {
             "statusValue",
             "Limited Database"
         );
-
     }
 
     loadFlight();
     updateSummary();
-
 }
 
 
-/* NAVIGATION */
+/* ROUTE CALCULATIONS */
 
 function toRadians(degrees) {
-
     return degrees * Math.PI / 180;
-
 }
 
 
 function toDegrees(radians) {
-
     return radians * 180 / Math.PI;
-
 }
 
 
-function calculateDistanceNm(
-    start,
-    end
-) {
-
+function calculateDistanceNm(start, end) {
     const earthRadiusNm = 3440.065;
 
-    const lat1 =
-        toRadians(start.lat);
+    const lat1 = toRadians(start.lat);
+    const lat2 = toRadians(end.lat);
 
-    const lat2 =
-        toRadians(end.lat);
+    const deltaLat = toRadians(
+        end.lat - start.lat
+    );
 
-    const deltaLat =
-        toRadians(
-            end.lat - start.lat
-        );
-
-    const deltaLon =
-        toRadians(
-            end.lon - start.lon
-        );
+    const deltaLon = toRadians(
+        end.lon - start.lon
+    );
 
     const a =
         Math.sin(deltaLat / 2) ** 2 +
@@ -845,25 +626,15 @@ function calculateDistanceNm(
         );
 
     return earthRadiusNm * c;
-
 }
 
 
-function calculateBearing(
-    start,
-    end
-) {
-
-    const lat1 =
-        toRadians(start.lat);
-
-    const lat2 =
-        toRadians(end.lat);
-
-    const deltaLon =
-        toRadians(
-            end.lon - start.lon
-        );
+function calculateBearing(start, end) {
+    const lat1 = toRadians(start.lat);
+    const lat2 = toRadians(end.lat);
+    const deltaLon = toRadians(
+        end.lon - start.lon
+    );
 
     const y =
         Math.sin(deltaLon) *
@@ -877,55 +648,35 @@ function calculateBearing(
         Math.cos(deltaLon);
 
     return (
-        toDegrees(
-            Math.atan2(y, x)
-        ) + 360
+        toDegrees(Math.atan2(y, x)) + 360
     ) % 360;
-
 }
 
 
 function formatFlightTime(hours) {
-
     if (
         !Number.isFinite(hours) ||
         hours <= 0
     ) {
-
         return "Not calculated";
-
     }
 
-    const totalMinutes =
-        Math.round(hours * 60);
-
-    const wholeHours =
-        Math.floor(
-            totalMinutes / 60
-        );
-
-    const minutes =
-        totalMinutes % 60;
+    const totalMinutes = Math.round(hours * 60);
+    const wholeHours = Math.floor(totalMinutes / 60);
+    const minutes = totalMinutes % 60;
 
     if (wholeHours === 0) {
-
         return `${minutes} min`;
-
     }
 
     return (
         `${wholeHours} hr ` +
-        `${String(minutes)
-            .padStart(2, "0")} min`
+        `${String(minutes).padStart(2, "0")} min`
     );
-
 }
 
 
-function calculateSampleCount(
-    distanceNm
-) {
-
+function calculateSampleCount(distanceNm) {
     if (distanceNm <= 30) {
         return 3;
     }
@@ -943,70 +694,42 @@ function calculateSampleCount(
     }
 
     return 7;
-
 }
 
 
-function interpolateRoute(
-    start,
-    end,
-    count
-) {
-
+function interpolateRoute(start, end, count) {
     const points = [];
 
-    for (
-        let index = 0;
-        index < count;
-        index += 1
-    ) {
-
-        const fraction =
-            index / (count - 1);
+    for (let index = 0; index < count; index += 1) {
+        const fraction = index / (count - 1);
 
         points.push({
-
             lat:
                 start.lat +
-                (
-                    end.lat -
-                    start.lat
-                ) *
-                fraction,
+                (end.lat - start.lat) * fraction,
 
             lon:
                 start.lon +
-                (
-                    end.lon -
-                    start.lon
-                ) *
-                fraction,
+                (end.lon - start.lon) * fraction,
 
             fraction
-
         });
-
     }
 
     return points;
-
 }
 
 
 function calculateRoute() {
+    const start = resolveAirport(
+        departure.value
+    );
 
-    const start =
-        resolveAirport(
-            departure.value
-        );
-
-    const end =
-        resolveAirport(
-            destination.value
-        );
+    const end = resolveAirport(
+        destination.value
+    );
 
     if (!start || !end) {
-
         setText(
             "resolvedDeparture",
             start
@@ -1044,26 +767,22 @@ function calculateRoute() {
         updateRouteMap();
 
         return null;
-
     }
 
-    const distance =
-        calculateDistanceNm(
-            start,
-            end
-        );
+    const distance = calculateDistanceNm(
+        start,
+        end
+    );
 
-    const bearing =
-        calculateBearing(
-            start,
-            end
-        );
+    const bearing = calculateBearing(
+        start,
+        end
+    );
 
-    const speed =
-        safeNumber(
-            cruiseSpeed.value,
-            0
-        );
+    const speed = safeNumber(
+        cruiseSpeed.value,
+        0
+    );
 
     const flightTime =
         speed > 0
@@ -1071,9 +790,7 @@ function calculateRoute() {
             : null;
 
     const sampleCount =
-        calculateSampleCount(
-            distance
-        );
+        calculateSampleCount(distance);
 
     setText(
         "resolvedDeparture",
@@ -1092,17 +809,14 @@ function calculateRoute() {
 
     setText(
         "bearingValue",
-        `${String(
-            Math.round(bearing)
-        ).padStart(3, "0")}° true`
+        `${String(Math.round(bearing))
+            .padStart(3, "0")}° true`
     );
 
     setText(
         "flightTimeValue",
         flightTime
-            ? formatFlightTime(
-                flightTime
-            )
+            ? formatFlightTime(flightTime)
             : "Enter cruise speed"
     );
 
@@ -1122,16 +836,13 @@ function calculateRoute() {
         flightTime,
         sampleCount
     };
-
 }
 
 
 /* MAP */
 
 function createRouteIcon() {
-
     return L.divIcon({
-
         className: "",
 
         html:
@@ -1140,19 +851,36 @@ function createRouteIcon() {
         iconSize: [18, 18],
         iconAnchor: [9, 9],
         popupAnchor: [0, -10]
-
     });
+}
 
+
+function cloudBaseMarkerText(cloudBaseFt) {
+    if (!Number.isFinite(cloudBaseFt)) {
+        return "?";
+    }
+
+    if (cloudBaseFt >= 10000) {
+        return "100+";
+    }
+
+    const hundreds = Math.max(
+        0,
+        Math.round(cloudBaseFt / 100)
+    );
+
+    return String(hundreds).padStart(2, "0");
 }
 
 
 function createWeatherIcon(
     riskClass,
-    number
+    cloudBaseFt
 ) {
+    const label =
+        cloudBaseMarkerText(cloudBaseFt);
 
     return L.divIcon({
-
         className: "",
 
         html: `
@@ -1161,31 +889,27 @@ function createWeatherIcon(
                     weather-map-marker
                     ${riskClass}
                 "
+                title="Cloud base ${formatCloudBase(cloudBaseFt)}"
             >
-                ${number}
+                ${label}
             </div>
         `,
 
-        iconSize: [28, 28],
-        iconAnchor: [14, 14],
-        popupAnchor: [0, -15]
-
+        iconSize: [34, 34],
+        iconAnchor: [17, 17],
+        popupAnchor: [0, -18]
     });
-
 }
 
 
 function initialiseMap() {
-
-    const mapElement =
-        $("routeMap");
+    const mapElement = $("routeMap");
 
     if (!mapElement) {
         return;
     }
 
     if (typeof L === "undefined") {
-
         mapElement.innerHTML = `
             <p class="error-text">
                 The map library did not load.
@@ -1193,29 +917,22 @@ function initialiseMap() {
         `;
 
         return;
-
     }
 
-    routeMap =
-        L.map(
-            "routeMap",
-            {
-                zoomControl: true
-            }
-        ).setView(
-            [-41.7, 172.4],
-            5
-        );
+    routeMap = L.map(
+        "routeMap",
+        {
+            zoomControl: true
+        }
+    ).setView(
+        [-41.7, 172.4],
+        5
+    );
 
     L.tileLayer(
         "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
         {
-            subdomains: [
-                "a",
-                "b",
-                "c"
-            ],
-
+            subdomains: ["a", "b", "c"],
             maxZoom: 19,
 
             attribution:
@@ -1224,50 +941,38 @@ function initialiseMap() {
     ).addTo(routeMap);
 
     routeMap.whenReady(() => {
-
         routeMap.invalidateSize();
         updateRouteMap();
-
     });
 
     window.setTimeout(() => {
-
         routeMap.invalidateSize();
         updateRouteMap();
-
     }, 700);
-
 }
 
 
 function removeMapLayer(layer) {
-
     if (
         routeMap &&
         layer &&
         routeMap.hasLayer(layer)
     ) {
-
         routeMap.removeLayer(layer);
-
     }
-
 }
 
 
 function clearWeatherMarkers() {
-
     routeWeatherMarkers.forEach(
         removeMapLayer
     );
 
     routeWeatherMarkers = [];
-
 }
 
 
 function clearRouteMap() {
-
     removeMapLayer(routeLine);
     removeMapLayer(departureMarker);
     removeMapLayer(destinationMarker);
@@ -1282,12 +987,10 @@ function clearRouteMap() {
         "mapRouteLabel",
         "No route"
     );
-
 }
 
 
 function updateRouteMap() {
-
     if (
         !routeMap ||
         !departure ||
@@ -1296,27 +999,23 @@ function updateRouteMap() {
         return;
     }
 
-    const start =
-        resolveAirport(
-            departure.value
-        );
+    const start = resolveAirport(
+        departure.value
+    );
 
-    const end =
-        resolveAirport(
-            destination.value
-        );
+    const end = resolveAirport(
+        destination.value
+    );
 
     clearRouteMap();
 
     if (!start || !end) {
-
         routeMap.setView(
             [-41.7, 172.4],
             5
         );
 
         return;
-
     }
 
     const startPosition = [
@@ -1329,70 +1028,61 @@ function updateRouteMap() {
         end.lon
     ];
 
-    departureMarker =
-        L.marker(
+    departureMarker = L.marker(
+        startPosition,
+        {
+            icon: createRouteIcon()
+        }
+    )
+        .addTo(routeMap)
+        .bindPopup(`
+            <strong>
+                ${escapeHtml(start.ident)}
+            </strong>
+
+            <br>
+
+            ${escapeHtml(start.name)}
+
+            <br>
+
+            Elevation:
+            ${Math.round(start.elevationFt)} ft
+        `);
+
+    destinationMarker = L.marker(
+        endPosition,
+        {
+            icon: createRouteIcon()
+        }
+    )
+        .addTo(routeMap)
+        .bindPopup(`
+            <strong>
+                ${escapeHtml(end.ident)}
+            </strong>
+
+            <br>
+
+            ${escapeHtml(end.name)}
+
+            <br>
+
+            Elevation:
+            ${Math.round(end.elevationFt)} ft
+        `);
+
+    routeLine = L.polyline(
+        [
             startPosition,
-            {
-                icon:
-                    createRouteIcon()
-            }
-        )
-            .addTo(routeMap)
-            .bindPopup(`
-                <strong>
-                    ${escapeHtml(start.ident)}
-                </strong>
-
-                <br>
-
-                ${escapeHtml(start.name)}
-
-                <br>
-
-                Elevation:
-                ${Math.round(
-                    start.elevationFt
-                )} ft
-            `);
-
-    destinationMarker =
-        L.marker(
-            endPosition,
-            {
-                icon:
-                    createRouteIcon()
-            }
-        )
-            .addTo(routeMap)
-            .bindPopup(`
-                <strong>
-                    ${escapeHtml(end.ident)}
-                </strong>
-
-                <br>
-
-                ${escapeHtml(end.name)}
-
-                <br>
-
-                Elevation:
-                ${Math.round(
-                    end.elevationFt
-                )} ft
-            `);
-
-    routeLine =
-        L.polyline(
-            [
-                startPosition,
-                endPosition
-            ],
-            {
-                weight: 4,
-                opacity: 0.9,
-                color: "#348cff"
-            }
-        ).addTo(routeMap);
+            endPosition
+        ],
+        {
+            weight: 4,
+            opacity: 0.9,
+            color: "#348cff"
+        }
+    ).addTo(routeMap);
 
     routeMap.fitBounds(
         routeLine.getBounds(),
@@ -1407,11 +1097,8 @@ function updateRouteMap() {
     );
 
     window.setTimeout(() => {
-
         routeMap.invalidateSize();
-
     }, 100);
-
 }
 
 
@@ -1421,61 +1108,45 @@ function estimateCloudBaseFtAgl(
     temperatureC,
     dewPointC
 ) {
-
     if (
         !Number.isFinite(temperatureC) ||
         !Number.isFinite(dewPointC)
     ) {
-
         return null;
-
     }
 
-    const spread =
-        Math.max(
-            0,
-            temperatureC - dewPointC
-        );
-
-    return Math.round(
-        spread * 400
+    const spread = Math.max(
+        0,
+        temperatureC - dewPointC
     );
 
+    return Math.round(spread * 400);
 }
 
 
-function assessCloudBase(
-    cloudBaseFt
-) {
-
+function assessCloudBase(cloudBaseFt) {
     if (!Number.isFinite(cloudBaseFt)) {
-
         return {
             level: 2,
             className: "review",
             label: "Cloud base unavailable"
         };
-
     }
 
     if (cloudBaseFt < 1000) {
-
         return {
             level: 3,
             className: "high",
             label: "Cloud base below 1,000 ft"
         };
-
     }
 
     if (cloudBaseFt < 3000) {
-
         return {
             level: 2,
             className: "review",
             label: "Cloud base 1,000–2,999 ft"
         };
-
     }
 
     return {
@@ -1483,141 +1154,104 @@ function assessCloudBase(
         className: "low",
         label: "Cloud base 3,000 ft or above"
     };
-
 }
 
 
-function formatCloudBase(
-    cloudBaseFt
-) {
-
+function formatCloudBase(cloudBaseFt) {
     if (!Number.isFinite(cloudBaseFt)) {
-
         return "Unavailable";
-
     }
 
     if (cloudBaseFt < 100) {
-
         return "<100 ft AGL";
-
     }
 
     return (
-        `${Math.round(
-            cloudBaseFt / 100
-        ) * 100} ft AGL`
+        `${Math.round(cloudBaseFt / 100) * 100}` +
+        " ft AGL"
     );
-
 }
 
 
 /* WEATHER */
 
 function makeWeatherUrl(point) {
+    const params = new URLSearchParams({
+        latitude: point.lat,
+        longitude: point.lon,
 
-    const params =
-        new URLSearchParams({
+        current: [
+            "temperature_2m",
+            "dew_point_2m",
+            "apparent_temperature",
+            "precipitation",
+            "weather_code",
+            "cloud_cover",
+            "cloud_cover_low",
+            "visibility",
+            "wind_speed_10m",
+            "wind_direction_10m",
+            "wind_gusts_10m"
+        ].join(","),
 
-            latitude:
-                point.lat,
-
-            longitude:
-                point.lon,
-
-            current: [
-                "temperature_2m",
-                "dew_point_2m",
-                "apparent_temperature",
-                "precipitation",
-                "weather_code",
-                "cloud_cover",
-                "cloud_cover_low",
-                "visibility",
-                "wind_speed_10m",
-                "wind_direction_10m",
-                "wind_gusts_10m"
-            ].join(","),
-
-            wind_speed_unit:
-                "kn",
-
-            timezone:
-                "auto"
-
-        });
+        wind_speed_unit: "kn",
+        timezone: "auto"
+    });
 
     return (
         "https://api.open-meteo.com/" +
         "v1/forecast?" +
         params.toString()
     );
-
 }
 
 
 async function fetchPointWeather(point) {
-
-    const response =
-        await fetch(
-            makeWeatherUrl(point),
-            {
-                cache: "no-store"
-            }
-        );
+    const response = await fetch(
+        makeWeatherUrl(point),
+        {
+            cache: "no-store"
+        }
+    );
 
     if (!response.ok) {
-
         throw new Error(
-            `Weather service returned ` +
-            `${response.status}`
+            `Weather service returned ${response.status}`
         );
-
     }
 
-    const data =
-        await response.json();
+    const data = await response.json();
 
     if (!data.current) {
-
         throw new Error(
             "Weather data was incomplete"
         );
-
     }
 
-    const temperature =
-        safeNumber(
-            data.current.temperature_2m,
-            NaN
-        );
+    const temperature = safeNumber(
+        data.current.temperature_2m,
+        NaN
+    );
 
-    const dewPoint =
-        safeNumber(
-            data.current.dew_point_2m,
-            NaN
-        );
+    const dewPoint = safeNumber(
+        data.current.dew_point_2m,
+        NaN
+    );
 
     return {
-
         ...point,
-
-        current:
-            data.current,
+        current: data.current,
 
         cloudBaseFt:
             estimateCloudBaseFtAgl(
                 temperature,
                 dewPoint
             )
-
     };
-
 }
 
 
 function compassDirection(degrees) {
-
     if (!Number.isFinite(degrees)) {
         return "–";
     }
@@ -1636,236 +1270,144 @@ function compassDirection(degrees) {
     return points[
         Math.round(degrees / 45) % 8
     ];
-
 }
 
 
 function weatherDescription(code) {
-
     const descriptions = {
-
         0: "Clear",
-
         1: "Mainly clear",
-
         2: "Partly cloudy",
-
         3: "Overcast",
-
         45: "Fog",
-
         48: "Rime fog",
-
         51: "Light drizzle",
-
         53: "Drizzle",
-
         55: "Heavy drizzle",
-
         56: "Freezing drizzle",
-
         57: "Heavy freezing drizzle",
-
         61: "Light rain",
-
         63: "Rain",
-
         65: "Heavy rain",
-
         66: "Freezing rain",
-
         67: "Heavy freezing rain",
-
         71: "Light snow",
-
         73: "Snow",
-
         75: "Heavy snow",
-
         77: "Snow grains",
-
         80: "Rain showers",
-
         81: "Rain showers",
-
         82: "Heavy showers",
-
         85: "Snow showers",
-
         86: "Heavy snow showers",
-
         95: "Thunderstorm",
-
         96: "Thunderstorm with hail",
-
         99: "Thunderstorm with hail"
-
     };
 
-    return (
-        descriptions[code] ||
-        "Forecast available"
-    );
-
+    return descriptions[code] ||
+        "Forecast available";
 }
 
 
 function assessPointRisk(point) {
+    const current = point.current;
 
-    const current =
-        point.current;
+    const wind = safeNumber(
+        current.wind_speed_10m
+    );
 
-    const wind =
-        safeNumber(
-            current.wind_speed_10m
-        );
+    const gust = safeNumber(
+        current.wind_gusts_10m
+    );
 
-    const gust =
-        safeNumber(
-            current.wind_gusts_10m
-        );
+    const rain = safeNumber(
+        current.precipitation
+    );
 
-    const lowCloud =
-        safeNumber(
-            current.cloud_cover_low
-        );
-
-    const rain =
-        safeNumber(
-            current.precipitation
-        );
-
-    const visibilityMetres =
+    const visibilityKm =
         safeNumber(
             current.visibility,
             100000
-        );
+        ) / 1000;
 
-    const visibilityKm =
-        visibilityMetres / 1000;
+    const code = safeNumber(
+        current.weather_code
+    );
 
-    const code =
-        safeNumber(
-            current.weather_code
-        );
-
-    const cloudBaseAssessment =
+    const cloudAssessment =
         assessCloudBase(
             point.cloudBaseFt
         );
 
     let level =
-        cloudBaseAssessment.level;
+        cloudAssessment.level;
 
     const reasons = [];
 
-    if (point.cloudBaseFt < 1000) {
-
+    if (point.cloudBaseFt < 3000) {
         reasons.push(
-            `estimated cloud base ` +
-            `${formatCloudBase(
+            `cloud base ${formatCloudBase(
                 point.cloudBaseFt
             )}`
         );
-
-    } else if (point.cloudBaseFt < 3000) {
-
-        reasons.push(
-            `estimated cloud base ` +
-            `${formatCloudBase(
-                point.cloudBaseFt
-            )}`
-        );
-
     }
-
 
     if (wind >= 22) {
-
         level = Math.max(level, 3);
 
         reasons.push(
             `wind ${Math.round(wind)} kt`
         );
-
     } else if (wind >= 15) {
-
         level = Math.max(level, 2);
 
         reasons.push(
             `wind ${Math.round(wind)} kt`
         );
-
     }
-
 
     if (gust >= 30) {
-
         level = Math.max(level, 3);
 
         reasons.push(
             `gusts ${Math.round(gust)} kt`
         );
-
     } else if (gust >= 20) {
-
         level = Math.max(level, 2);
 
         reasons.push(
             `gusts ${Math.round(gust)} kt`
         );
-
     }
-
 
     if (visibilityKm < 5) {
-
         level = Math.max(level, 3);
 
         reasons.push(
             `visibility ${visibilityKm.toFixed(1)} km`
         );
-
     } else if (visibilityKm < 10) {
-
         level = Math.max(level, 2);
 
         reasons.push(
             `visibility ${visibilityKm.toFixed(1)} km`
         );
-
     }
-
-
-    if (lowCloud >= 90) {
-
-        level = Math.max(level, 2);
-
-        reasons.push(
-            `low cloud ${Math.round(lowCloud)}%`
-        );
-
-    }
-
 
     if (rain >= 4) {
-
         level = Math.max(level, 3);
 
         reasons.push(
             `precipitation ${rain.toFixed(1)} mm`
         );
-
     } else if (rain > 0) {
-
         level = Math.max(level, 2);
 
         reasons.push(
             `precipitation ${rain.toFixed(1)} mm`
         );
-
     }
-
 
     if (
         [
@@ -1880,13 +1422,8 @@ function assessPointRisk(point) {
             99
         ].includes(code)
     ) {
-
         level = 3;
-
-        reasons.push(
-            weatherDescription(code)
-        );
-
+        reasons.push(weatherDescription(code));
     } else if (
         [
             45,
@@ -1904,53 +1441,45 @@ function assessPointRisk(point) {
             85
         ].includes(code)
     ) {
-
         level = Math.max(level, 2);
-
-        reasons.push(
-            weatherDescription(code)
-        );
-
+        reasons.push(weatherDescription(code));
     }
 
-
     if (level >= 3) {
-
         return {
             level: 3,
             className: "high",
             label: "High concern",
+
             reasons:
                 reasons.length
                     ? reasons
                     : ["Higher-concern conditions"]
         };
-
     }
 
     if (level === 2) {
-
         return {
             level: 2,
             className: "review",
             label: "Review",
+
             reasons:
                 reasons.length
                     ? reasons
                     : ["Conditions deserve review"]
         };
-
     }
 
     return {
         level: 1,
         className: "low",
         label: "Lower concern",
+
         reasons: [
             "No threshold concerns detected"
         ]
     };
-
 }
 
 
@@ -1962,44 +1491,31 @@ function routePointLabel(
     total,
     route
 ) {
-
     if (index === 0) {
-
         return (
             `${route.start.ident} · ` +
             `${route.start.name}`
         );
-
     }
 
     if (index === total - 1) {
-
         return (
             `${route.end.ident} · ` +
             `${route.end.name}`
         );
-
     }
 
     return (
-        `${Math.round(
-            point.fraction * 100
-        )}% along route`
+        `${Math.round(point.fraction * 100)}` +
+        "% along route"
     );
-
 }
 
 
-function distanceAlongRoute(
-    point,
-    route
-) {
-
+function distanceAlongRoute(point, route) {
     return Math.round(
-        route.distance *
-        point.fraction
+        route.distance * point.fraction
     );
-
 }
 
 
@@ -2007,226 +1523,196 @@ function renderRouteWeather(
     points,
     route
 ) {
-
     routeWeatherResult.innerHTML = `
         <div class="route-weather-list">
 
-            ${points.map(
-                (point, index) => {
+            ${points.map((point, index) => {
+                const current = point.current;
+                const risk = assessPointRisk(point);
 
-                    const current =
-                        point.current;
+                const cloudAssessment =
+                    assessCloudBase(
+                        point.cloudBaseFt
+                    );
 
-                    const risk =
-                        assessPointRisk(point);
+                const temperature = safeNumber(
+                    current.temperature_2m
+                );
 
-                    const cloudAssessment =
-                        assessCloudBase(
-                            point.cloudBaseFt
-                        );
+                const dewPoint = safeNumber(
+                    current.dew_point_2m
+                );
 
-                    const temperature =
-                        safeNumber(
-                            current.temperature_2m
-                        );
+                const wind = safeNumber(
+                    current.wind_speed_10m
+                );
 
-                    const dewPoint =
-                        safeNumber(
-                            current.dew_point_2m
-                        );
+                const gust = safeNumber(
+                    current.wind_gusts_10m
+                );
 
-                    const wind =
-                        safeNumber(
-                            current.wind_speed_10m
-                        );
+                const direction = safeNumber(
+                    current.wind_direction_10m
+                );
 
-                    const gust =
-                        safeNumber(
-                            current.wind_gusts_10m
-                        );
+                const visibilityKm =
+                    safeNumber(
+                        current.visibility
+                    ) / 1000;
 
-                    const direction =
-                        safeNumber(
-                            current.wind_direction_10m
-                        );
+                const rain = safeNumber(
+                    current.precipitation
+                );
 
-                    const totalCloud =
-                        safeNumber(
-                            current.cloud_cover
-                        );
+                const code = safeNumber(
+                    current.weather_code
+                );
 
-                    const lowCloud =
-                        safeNumber(
-                            current.cloud_cover_low
-                        );
+                const label = routePointLabel(
+                    point,
+                    index,
+                    points.length,
+                    route
+                );
 
-                    const visibilityKm =
-                        safeNumber(
-                            current.visibility
-                        ) / 1000;
+                const distance =
+                    distanceAlongRoute(
+                        point,
+                        route
+                    );
 
-                    const rain =
-                        safeNumber(
-                            current.precipitation
-                        );
+                const reasons = risk.reasons
+                    .map(escapeHtml)
+                    .join(", ");
 
-                    const code =
-                        safeNumber(
-                            current.weather_code
-                        );
+                return `
+                    <article
+                        class="
+                            route-weather-card
+                            ${risk.className}
+                        "
+                    >
 
-                    const label =
-                        routePointLabel(
-                            point,
-                            index,
-                            points.length,
-                            route
-                        );
+                        <div class="route-step">
+                            ${index + 1}
+                        </div>
 
-                    const distance =
-                        distanceAlongRoute(
-                            point,
-                            route
-                        );
+                        <div>
 
-                    const reasons =
-                        risk.reasons
-                            .map(escapeHtml)
-                            .join(", ");
+                            <div class="route-card-heading">
 
-                    return `
-                        <article
-                            class="
-                                route-weather-card
-                                ${risk.className}
-                            "
-                        >
+                                <strong>
+                                    ${escapeHtml(label)}
+                                </strong>
 
-                            <div class="route-step">
-                                ${index + 1}
+                                <span>
+                                    ${distance} NM
+                                </span>
+
                             </div>
 
-                            <div>
+                            <p>
+                                ${weatherDescription(code)}
+                                ·
+                                ${Math.round(temperature)}°C
 
-                                <div class="route-card-heading">
+                                · Dew point
+                                ${Math.round(dewPoint)}°C
+                            </p>
 
-                                    <strong>
-                                        ${escapeHtml(label)}
-                                    </strong>
+                            <p>
+                                Wind
+
+                                ${String(
+                                    Math.round(direction)
+                                ).padStart(3, "0")}°
+
+                                ${compassDirection(direction)}
+
+                                at
+                                ${Math.round(wind)} kt
+
+                                · gusts
+                                ${Math.round(gust)} kt
+                            </p>
+
+                            <div class="weather-metrics">
+
+                                <div class="weather-metric">
 
                                     <span>
-                                        ${distance} NM
+                                        Cloud base
                                     </span>
 
-                                </div>
-
-                                <p>
-                                    ${weatherDescription(code)}
-                                    ·
-                                    ${Math.round(temperature)}°C
-
-                                    · Dew point
-                                    ${Math.round(dewPoint)}°C
-                                </p>
-
-                                <p>
-                                    Wind
-
-                                    ${String(
-                                        Math.round(direction)
-                                    ).padStart(3, "0")}°
-
-                                    ${compassDirection(direction)}
-
-                                    at
-                                    ${Math.round(wind)} kt
-
-                                    · gusts
-                                    ${Math.round(gust)} kt
-                                </p>
-
-                                <div class="weather-metrics">
-
-                                    <div class="weather-metric">
-
-                                        <span>
-                                            Est. base
-                                        </span>
-
-                                        <strong
-                                            class="
-                                                cloud-base-value
-                                                ${cloudAssessment.className}
-                                            "
-                                        >
-                                            ${formatCloudBase(
-                                                point.cloudBaseFt
-                                            )}
-                                        </strong>
-
-                                    </div>
-
-                                    <div class="weather-metric">
-
-                                        <span>
-                                            Low cloud
-                                        </span>
-
-                                        <strong>
-                                            ${Math.round(lowCloud)}%
-                                        </strong>
-
-                                    </div>
-
-                                    <div class="weather-metric">
-
-                                        <span>
-                                            Visibility
-                                        </span>
-
-                                        <strong>
-                                            ${visibilityKm.toFixed(1)} km
-                                        </strong>
-
-                                    </div>
-
-                                    <div class="weather-metric">
-
-                                        <span>
-                                            Total cloud
-                                        </span>
-
-                                        <strong>
-                                            ${Math.round(totalCloud)}%
-                                        </strong>
-
-                                    </div>
+                                    <strong
+                                        class="
+                                            cloud-base-value
+                                            ${cloudAssessment.className}
+                                        "
+                                    >
+                                        ${formatCloudBase(
+                                            point.cloudBaseFt
+                                        )}
+                                    </strong>
 
                                 </div>
 
-                                <p>
-                                    Model precipitation:
-                                    ${rain.toFixed(1)} mm
-                                </p>
+                                <div class="weather-metric">
 
-                                <p class="route-condition">
+                                    <span>
+                                        Visibility
+                                    </span>
 
-                                    ${risk.label}:
-                                    ${reasons}
+                                    <strong>
+                                        ${visibilityKm.toFixed(1)} km
+                                    </strong>
 
-                                </p>
+                                </div>
+
+                                <div class="weather-metric">
+
+                                    <span>
+                                        Wind
+                                    </span>
+
+                                    <strong>
+                                        ${Math.round(wind)} kt
+                                    </strong>
+
+                                </div>
+
+                                <div class="weather-metric">
+
+                                    <span>
+                                        Gusts
+                                    </span>
+
+                                    <strong>
+                                        ${Math.round(gust)} kt
+                                    </strong>
+
+                                </div>
 
                             </div>
 
-                        </article>
-                    `;
+                            <p>
+                                Precipitation:
+                                ${rain.toFixed(1)} mm
+                            </p>
 
-                }
-            ).join("")}
+                            <p class="route-condition">
+                                ${risk.label}:
+                                ${reasons}
+                            </p>
+
+                        </div>
+
+                    </article>
+                `;
+            }).join("")}
 
         </div>
     `;
-
 }
 
 
@@ -2234,72 +1720,50 @@ function renderAirportWeather(
     point,
     airport
 ) {
-
-    const current =
-        point.current;
-
-    const risk =
-        assessPointRisk(point);
+    const current = point.current;
+    const risk = assessPointRisk(point);
 
     const cloudAssessment =
         assessCloudBase(
             point.cloudBaseFt
         );
 
-    const temperature =
-        safeNumber(
-            current.temperature_2m
-        );
+    const temperature = safeNumber(
+        current.temperature_2m
+    );
 
-    const apparent =
-        safeNumber(
-            current.apparent_temperature
-        );
+    const apparent = safeNumber(
+        current.apparent_temperature
+    );
 
-    const dewPoint =
-        safeNumber(
-            current.dew_point_2m
-        );
+    const dewPoint = safeNumber(
+        current.dew_point_2m
+    );
 
-    const wind =
-        safeNumber(
-            current.wind_speed_10m
-        );
+    const wind = safeNumber(
+        current.wind_speed_10m
+    );
 
-    const gust =
-        safeNumber(
-            current.wind_gusts_10m
-        );
+    const gust = safeNumber(
+        current.wind_gusts_10m
+    );
 
-    const direction =
-        safeNumber(
-            current.wind_direction_10m
-        );
-
-    const totalCloud =
-        safeNumber(
-            current.cloud_cover
-        );
-
-    const lowCloud =
-        safeNumber(
-            current.cloud_cover_low
-        );
+    const direction = safeNumber(
+        current.wind_direction_10m
+    );
 
     const visibilityKm =
         safeNumber(
             current.visibility
         ) / 1000;
 
-    const precipitation =
-        safeNumber(
-            current.precipitation
-        );
+    const precipitation = safeNumber(
+        current.precipitation
+    );
 
-    const weatherCode =
-        safeNumber(
-            current.weather_code
-        );
+    const weatherCode = safeNumber(
+        current.weather_code
+    );
 
     return `
         <article
@@ -2318,13 +1782,10 @@ function renderAirportWeather(
             </div>
 
             <h3>
-                ${weatherDescription(
-                    weatherCode
-                )}
+                ${weatherDescription(weatherCode)}
             </h3>
 
             <p>
-
                 🌡
 
                 <strong>
@@ -2336,15 +1797,12 @@ function renderAirportWeather(
 
                 · dew point
                 ${Math.round(dewPoint)}°C
-
             </p>
 
             <p>
-
                 💨
 
                 <strong>
-
                     ${String(
                         Math.round(direction)
                     ).padStart(3, "0")}°
@@ -2353,17 +1811,14 @@ function renderAirportWeather(
 
                     at
                     ${Math.round(wind)} kt
-
                 </strong>
 
                 · gusts
                 ${Math.round(gust)} kt
-
             </p>
 
             <p>
-
-                Estimated cloud base:
+                Cloud base:
 
                 <strong
                     class="
@@ -2375,14 +1830,6 @@ function renderAirportWeather(
                         point.cloudBaseFt
                     )}
                 </strong>
-
-            </p>
-
-            <p>
-                Low cloud:
-                ${Math.round(lowCloud)}%
-                · total cloud:
-                ${Math.round(totalCloud)}%
             </p>
 
             <p>
@@ -2404,7 +1851,6 @@ function renderAirportWeather(
 
         </article>
     `;
-
 }
 
 
@@ -2412,227 +1858,118 @@ function plotWeatherMarkers(
     points,
     route
 ) {
-
     if (!routeMap) {
         return;
     }
 
     clearWeatherMarkers();
 
-    points.forEach(
-        (point, index) => {
+    points.forEach((point, index) => {
+        const risk = assessPointRisk(point);
+        const current = point.current;
 
-            const risk =
-                assessPointRisk(point);
-
-            const current =
-                point.current;
-
-            const label =
-                routePointLabel(
-                    point,
-                    index,
-                    points.length,
-                    route
-                );
-
-            const visibilityKm =
-                safeNumber(
-                    current.visibility
-                ) / 1000;
-
-            const marker =
-                L.marker(
-                    [
-                        point.lat,
-                        point.lon
-                    ],
-                    {
-                        icon:
-                            createWeatherIcon(
-                                risk.className,
-                                index + 1
-                            )
-                    }
-                )
-                    .addTo(routeMap)
-                    .bindPopup(`
-                        <strong>
-                            ${escapeHtml(label)}
-                        </strong>
-
-                        <br>
-
-                        ${weatherDescription(
-                            safeNumber(
-                                current.weather_code
-                            )
-                        )}
-
-                        <br>
-
-                        Wind:
-                        ${Math.round(
-                            safeNumber(
-                                current.wind_speed_10m
-                            )
-                        )} kt
-
-                        · Gusts:
-                        ${Math.round(
-                            safeNumber(
-                                current.wind_gusts_10m
-                            )
-                        )} kt
-
-                        <br>
-
-                        Estimated cloud base:
-                        ${formatCloudBase(
-                            point.cloudBaseFt
-                        )}
-
-                        <br>
-
-                        Low cloud:
-                        ${Math.round(
-                            safeNumber(
-                                current.cloud_cover_low
-                            )
-                        )}%
-
-                        <br>
-
-                        Visibility:
-                        ${visibilityKm.toFixed(1)} km
-
-                        <br><br>
-
-                        <strong>
-                            ${risk.label}
-                        </strong>
-                    `);
-
-            routeWeatherMarkers.push(
-                marker
-            );
-
-        }
-    );
-
-}
-
-
-/* OVERALL ROUTE ASSESSMENT */
-
-function assessWholeRoute(points) {
-
-    const assessed =
-        points.map((point) => ({
+        const label = routePointLabel(
             point,
-            risk:
-                assessPointRisk(point)
-        }));
-
-    const worst =
-        assessed.reduce(
-            (currentWorst, item) => {
-
-                if (
-                    item.risk.level >
-                    currentWorst.risk.level
-                ) {
-
-                    return item;
-
-                }
-
-                if (
-                    item.risk.level ===
-                    currentWorst.risk.level &&
-                    pointConcernScore(item.point) >
-                    pointConcernScore(
-                        currentWorst.point
-                    )
-                ) {
-
-                    return item;
-
-                }
-
-                return currentWorst;
-
-            },
-            assessed[0]
+            index,
+            points.length,
+            route
         );
 
-    const maxWind =
-        Math.max(
-            ...points.map(
-                (point) =>
-                    safeNumber(
-                        point.current.wind_speed_10m
-                    )
-            )
+        const visibilityKm =
+            safeNumber(
+                current.visibility
+            ) / 1000;
+
+        const direction = safeNumber(
+            current.wind_direction_10m
         );
 
-    const maxGust =
-        Math.max(
-            ...points.map(
-                (point) =>
-                    safeNumber(
-                        point.current.wind_gusts_10m
-                    )
-            )
+        const wind = safeNumber(
+            current.wind_speed_10m
         );
 
-    const minimumCloudBase =
-        Math.min(
-            ...points
-                .map(
-                    (point) =>
+        const gust = safeNumber(
+            current.wind_gusts_10m
+        );
+
+        const rain = safeNumber(
+            current.precipitation
+        );
+
+        const marker = L.marker(
+            [
+                point.lat,
+                point.lon
+            ],
+            {
+                icon: createWeatherIcon(
+                    risk.className,
+                    point.cloudBaseFt
+                )
+            }
+        )
+            .addTo(routeMap)
+            .bindPopup(`
+                <strong>
+                    ${escapeHtml(label)}
+                </strong>
+
+                <br><br>
+
+                Cloud base:
+                <strong>
+                    ${formatCloudBase(
                         point.cloudBaseFt
-                )
-                .filter(
-                    Number.isFinite
-                )
-        );
+                    )}
+                </strong>
 
-    const minimumVisibility =
-        Math.min(
-            ...points.map(
-                (point) =>
-                    safeNumber(
-                        point.current.visibility,
-                        100000
-                    ) / 1000
-            )
-        );
+                <br>
 
-    return {
-        worst,
-        maxWind,
-        maxGust,
-        minimumCloudBase,
-        minimumVisibility
-    };
+                Visibility:
+                ${visibilityKm.toFixed(1)} km
 
+                <br>
+
+                Wind:
+                ${String(
+                    Math.round(direction)
+                ).padStart(3, "0")}°
+
+                at
+                ${Math.round(wind)} kt
+
+                <br>
+
+                Gusts:
+                ${Math.round(gust)} kt
+
+                <br>
+
+                Precipitation:
+                ${rain.toFixed(1)} mm
+
+                <br><br>
+
+                <strong>
+                    ${risk.label}
+                </strong>
+            `);
+
+        routeWeatherMarkers.push(marker);
+    });
 }
 
+
+/* WHOLE ROUTE ASSESSMENT */
 
 function pointConcernScore(point) {
-
-    const current =
-        point.current;
+    const current = point.current;
 
     const cloudPenalty =
-        Number.isFinite(
-            point.cloudBaseFt
-        )
+        Number.isFinite(point.cloudBaseFt)
             ? Math.max(
                 0,
-                3000 -
-                point.cloudBaseFt
+                3000 - point.cloudBaseFt
             )
             : 1000;
 
@@ -2650,7 +1987,81 @@ function pointConcernScore(point) {
             ) / 1000
         ) * 100
     );
+}
 
+
+function assessWholeRoute(points) {
+    const assessed = points.map((point) => ({
+        point,
+        risk: assessPointRisk(point)
+    }));
+
+    const worst = assessed.reduce(
+        (currentWorst, item) => {
+            if (
+                item.risk.level >
+                currentWorst.risk.level
+            ) {
+                return item;
+            }
+
+            if (
+                item.risk.level ===
+                currentWorst.risk.level &&
+                pointConcernScore(item.point) >
+                pointConcernScore(
+                    currentWorst.point
+                )
+            ) {
+                return item;
+            }
+
+            return currentWorst;
+        },
+        assessed[0]
+    );
+
+    const maxWind = Math.max(
+        ...points.map((point) =>
+            safeNumber(
+                point.current.wind_speed_10m
+            )
+        )
+    );
+
+    const maxGust = Math.max(
+        ...points.map((point) =>
+            safeNumber(
+                point.current.wind_gusts_10m
+            )
+        )
+    );
+
+    const validCloudBases = points
+        .map((point) => point.cloudBaseFt)
+        .filter(Number.isFinite);
+
+    const minimumCloudBase =
+        validCloudBases.length
+            ? Math.min(...validCloudBases)
+            : NaN;
+
+    const minimumVisibility = Math.min(
+        ...points.map((point) =>
+            safeNumber(
+                point.current.visibility,
+                100000
+            ) / 1000
+        )
+    );
+
+    return {
+        worst,
+        maxWind,
+        maxGust,
+        minimumCloudBase,
+        minimumVisibility
+    };
 }
 
 
@@ -2659,12 +2070,8 @@ function displayOverallAssessment(
     points,
     route
 ) {
-
-    const panel =
-        $("decisionPanel");
-
-    const riskDetails =
-        $("riskDetails");
+    const panel = $("decisionPanel");
+    const riskDetails = $("riskDetails");
 
     panel?.classList.remove(
         "good",
@@ -2672,24 +2079,21 @@ function displayOverallAssessment(
         "bad"
     );
 
-    const worstIndex =
-        points.indexOf(
-            assessment.worst.point
-        );
+    const worstIndex = points.indexOf(
+        assessment.worst.point
+    );
 
-    const worstLocation =
-        routePointLabel(
-            assessment.worst.point,
-            worstIndex,
-            points.length,
-            route
-        );
+    const worstLocation = routePointLabel(
+        assessment.worst.point,
+        worstIndex,
+        points.length,
+        route
+    );
 
     const level =
         assessment.worst.risk.level;
 
     if (level === 3) {
-
         panel?.classList.add("bad");
 
         setText(
@@ -2699,7 +2103,7 @@ function displayOverallAssessment(
 
         setText(
             "decisionMessage",
-            `The highest-concern modelled conditions are near ${worstLocation}. A red cloud-base indication means the estimated base is below 1,000 ft AGL. Review official aviation weather and the complete route before making any flight decision.`
+            `The highest-concern conditions are near ${worstLocation}. Check the cloud base, visibility, wind and official aviation weather before making any flight decision.`
         );
 
         setText(
@@ -2716,9 +2120,7 @@ function displayOverallAssessment(
             "warningsValue",
             "High concern"
         );
-
     } else if (level === 2) {
-
         panel?.classList.add("review");
 
         setText(
@@ -2728,7 +2130,7 @@ function displayOverallAssessment(
 
         setText(
             "decisionMessage",
-            `Conditions deserve closer examination near ${worstLocation}. Check estimated cloud base, visibility, wind, precipitation and terrain using official aviation sources.`
+            `Conditions deserve closer examination near ${worstLocation}. Check the cloud base, visibility, wind, precipitation and terrain.`
         );
 
         setText(
@@ -2745,9 +2147,7 @@ function displayOverallAssessment(
             "warningsValue",
             "Review required"
         );
-
     } else {
-
         panel?.classList.add("good");
 
         setText(
@@ -2757,7 +2157,7 @@ function displayOverallAssessment(
 
         setText(
             "decisionMessage",
-            "No configured threshold concerns were found at the sampled points. This limited model snapshot is not a go or no-go recommendation."
+            "No configured threshold concerns were found at the sampled points. This is not a go or no-go recommendation."
         );
 
         setText(
@@ -2774,19 +2174,15 @@ function displayOverallAssessment(
             "warningsValue",
             "Lower concern"
         );
-
     }
 
-    riskDetails.classList.remove(
-        "hidden"
-    );
+    riskDetails.classList.remove("hidden");
 
     riskDetails.innerHTML = `
-
         <div class="risk-detail">
 
             <span>
-                Lowest est. base
+                Lowest cloud base
             </span>
 
             <strong>
@@ -2796,7 +2192,6 @@ function displayOverallAssessment(
             </strong>
 
         </div>
-
 
         <div class="risk-detail">
 
@@ -2809,7 +2204,6 @@ function displayOverallAssessment(
             </strong>
 
         </div>
-
 
         <div class="risk-detail">
 
@@ -2825,7 +2219,6 @@ function displayOverallAssessment(
 
         </div>
 
-
         <div class="risk-detail">
 
             <span>
@@ -2839,25 +2232,20 @@ function displayOverallAssessment(
             </strong>
 
         </div>
-
     `;
-
 }
 
 
-/* STORAGE AND SUMMARY */
+/* SAVE AND LOAD */
 
 function updateSummary() {
+    const start = resolveAirport(
+        departure.value
+    );
 
-    const start =
-        resolveAirport(
-            departure.value
-        );
-
-    const end =
-        resolveAirport(
-            destination.value
-        );
+    const end = resolveAirport(
+        destination.value
+    );
 
     setText(
         "departureSummary",
@@ -2896,26 +2284,19 @@ function updateSummary() {
     );
 
     calculateRoute();
-
 }
 
 
-function saveFlight(
-    showConfirmation = false
-) {
+function saveFlight(showConfirmation = false) {
+    const start = resolveAirport(
+        departure.value
+    );
 
-    const start =
-        resolveAirport(
-            departure.value
-        );
-
-    const end =
-        resolveAirport(
-            destination.value
-        );
+    const end = resolveAirport(
+        destination.value
+    );
 
     const flight = {
-
         departure:
             start
                 ? airportDisplayValue(start)
@@ -2926,84 +2307,60 @@ function saveFlight(
                 ? airportDisplayValue(end)
                 : destination.value,
 
-        altitude:
-            altitude.value,
-
-        departureTime:
-            departureTime.value,
-
-        cruiseSpeed:
-            cruiseSpeed.value
-
+        altitude: altitude.value,
+        departureTime: departureTime.value,
+        cruiseSpeed: cruiseSpeed.value
     };
 
     try {
-
         localStorage.setItem(
             "lastFlight",
             JSON.stringify(flight)
         );
-
     } catch (error) {
-
         console.warn(
             "Could not save flight",
             error
         );
-
     }
 
     updateSummary();
 
     if (showConfirmation) {
-
         setText(
             "statusValue",
             "Route Saved"
         );
 
         window.setTimeout(() => {
-
             if (
-                $("statusValue")
-                    ?.textContent ===
+                $("statusValue")?.textContent ===
                 "Route Saved"
             ) {
-
                 setText(
                     "statusValue",
                     "Ready"
                 );
-
             }
-
         }, 1600);
-
     }
-
 }
 
 
 function loadFlight() {
-
     try {
-
-        const saved =
-            localStorage.getItem(
-                "lastFlight"
-            );
+        const saved = localStorage.getItem(
+            "lastFlight"
+        );
 
         if (!saved) {
-
             cruiseSpeed.value =
                 cruiseSpeed.value || "110";
 
             return;
-
         }
 
-        const flight =
-            JSON.parse(saved);
+        const flight = JSON.parse(saved);
 
         departure.value =
             flight.departure || "";
@@ -3019,42 +2376,30 @@ function loadFlight() {
 
         cruiseSpeed.value =
             flight.cruiseSpeed || "110";
-
     } catch (error) {
-
         console.warn(
             "Could not load saved flight",
             error
         );
 
         cruiseSpeed.value = "110";
-
     }
-
 }
 
 
 function normaliseAirportInput(input) {
-
-    const airport =
-        resolveAirport(
-            input.value
-        );
+    const airport = resolveAirport(
+        input.value
+    );
 
     if (airport) {
-
         input.value =
-            airportDisplayValue(
-                airport
-            );
-
+            airportDisplayValue(airport);
     }
-
 }
 
 
 function reverseRoute() {
-
     const oldDeparture =
         departure.value;
 
@@ -3066,12 +2411,10 @@ function reverseRoute() {
 
     clearWeatherBriefing();
     saveFlight();
-
 }
 
 
 function clearWeatherBriefing() {
-
     clearWeatherMarkers();
 
     setText(
@@ -3117,8 +2460,7 @@ function clearWeatherBriefing() {
         "Not assessed"
     );
 
-    const panel =
-        $("decisionPanel");
+    const panel = $("decisionPanel");
 
     panel?.classList.remove(
         "good",
@@ -3127,30 +2469,19 @@ function clearWeatherBriefing() {
     );
 
     $("riskDetails")
-        ?.classList.add(
-            "hidden"
-        );
-
+        ?.classList.add("hidden");
 }
 
 
-/* MAIN WEATHER ACTION */
+/* GET WEATHER */
 
 async function getWeather() {
+    normaliseAirportInput(departure);
+    normaliseAirportInput(destination);
 
-    normaliseAirportInput(
-        departure
-    );
-
-    normaliseAirportInput(
-        destination
-    );
-
-    const route =
-        calculateRoute();
+    const route = calculateRoute();
 
     if (!route) {
-
         setText(
             "weatherBadge",
             "CHECK ROUTE"
@@ -3174,7 +2505,6 @@ async function getWeather() {
         `;
 
         return;
-
     }
 
     saveFlight();
@@ -3223,19 +2553,15 @@ async function getWeather() {
     `;
 
     try {
-
-        const routePoints =
-            interpolateRoute(
-                route.start,
-                route.end,
-                route.sampleCount
-            );
+        const routePoints = interpolateRoute(
+            route.start,
+            route.end,
+            route.sampleCount
+        );
 
         const weatherPoints =
             await Promise.all(
-                routePoints.map(
-                    fetchPointWeather
-                )
+                routePoints.map(fetchPointWeather)
             );
 
         renderRouteWeather(
@@ -3267,9 +2593,7 @@ async function getWeather() {
         );
 
         const assessment =
-            assessWholeRoute(
-                weatherPoints
-            );
+            assessWholeRoute(weatherPoints);
 
         displayOverallAssessment(
             assessment,
@@ -3289,18 +2613,15 @@ async function getWeather() {
 
         setText(
             "updatedValue",
-            new Date()
-                .toLocaleTimeString(
-                    [],
-                    {
-                        hour: "2-digit",
-                        minute: "2-digit"
-                    }
-                )
+            new Date().toLocaleTimeString(
+                [],
+                {
+                    hour: "2-digit",
+                    minute: "2-digit"
+                }
+            )
         );
-
     } catch (error) {
-
         console.error(error);
 
         setText(
@@ -3342,130 +2663,86 @@ async function getWeather() {
                 not be completed.
             </p>
         `;
-
     } finally {
-
         weatherButton.disabled = false;
 
         weatherButton.textContent =
             "🌦 Get Route Weather Briefing";
-
     }
-
 }
 
 
-/* INITIALISATION */
+/* START APP */
 
 function initialiseApp() {
+    departure = $("departure");
+    destination = $("destination");
+    altitude = $("altitude");
+    departureTime = $("departureTime");
+    cruiseSpeed = $("cruiseSpeed");
+    weatherButton = $("weatherButton");
+    weatherResult = $("weatherResult");
+    routeWeatherResult = $("routeWeatherResult");
 
-    departure =
-        $("departure");
+    $("reverseButton").addEventListener(
+        "click",
+        reverseRoute
+    );
 
-    destination =
-        $("destination");
+    $("saveButton").addEventListener(
+        "click",
+        () => saveFlight(true)
+    );
 
-    altitude =
-        $("altitude");
-
-    departureTime =
-        $("departureTime");
-
-    cruiseSpeed =
-        $("cruiseSpeed");
-
-    weatherButton =
-        $("weatherButton");
-
-    weatherResult =
-        $("weatherResult");
-
-    routeWeatherResult =
-        $("routeWeatherResult");
-
-    $("reverseButton")
-        .addEventListener(
-            "click",
-            reverseRoute
-        );
-
-    $("saveButton")
-        .addEventListener(
-            "click",
-            () => saveFlight(true)
-        );
-
-    weatherButton
-        .addEventListener(
-            "click",
-            getWeather
-        );
+    weatherButton.addEventListener(
+        "click",
+        getWeather
+    );
 
     document
         .querySelectorAll("input")
         .forEach((input) => {
-
             input.addEventListener(
                 "input",
                 () => {
-
                     clearWeatherMarkers();
                     updateSummary();
-
                 }
             );
 
             input.addEventListener(
                 "change",
                 () => {
-
                     if (
                         input === departure ||
                         input === destination
                     ) {
-
-                        normaliseAirportInput(
-                            input
-                        );
-
+                        normaliseAirportInput(input);
                     }
 
                     saveFlight();
-
                 }
             );
-
         });
 
     departure.addEventListener(
         "blur",
         () => {
-
-            normaliseAirportInput(
-                departure
-            );
-
+            normaliseAirportInput(departure);
             saveFlight();
-
         }
     );
 
     destination.addEventListener(
         "blur",
         () => {
-
-            normaliseAirportInput(
-                destination
-            );
-
+            normaliseAirportInput(destination);
             saveFlight();
-
         }
     );
 
     initialiseMap();
     loadAerodromeDatabase();
-
 }
 
 
