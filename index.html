@@ -1,172 +1,312 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Takeoff</title>
+    <meta charset="UTF-8">
 
-<link rel="stylesheet" href="style.css">
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0, viewport-fit=cover"
+    >
+
+    <meta name="theme-color" content="#071525">
+
+    <title>Takeoff</title>
+
+    <link rel="stylesheet" href="style.css">
 </head>
 
 <body>
 
 <div class="app-shell">
 
-<div class="topbar">
-<div>
-<div class="eyebrow">FLIGHT PLANNING</div>
-<h1>TAKEOFF</h1>
-</div>
+    <header class="topbar">
 
-<div class="aircraft-badge">
-<span>Aircraft</span>
-<strong>Bearhawk</strong>
-</div>
-</div>
-
-
-<div class="panel">
-
-<h2>Flight Details</h2>
-
-<label>
-Departure
-<input id="departure" placeholder="NZAS">
-</label>
-
-<label>
-Destination
-<input id="destination" placeholder="NZHT">
-</label>
-
-<div class="two-column">
-
-<label>
-Cruise Altitude
-<input id="altitude" placeholder="7500 ft">
-</label>
-
-<label>
-Departure Time
-<input id="departureTime" type="time">
-</label>
-
-</div>
-
-<button class="primary-button" onclick="getWeather(async function getWeather() {
-
-    const dep = departure.value.trim().toUpperCase();
-    const dest = destination.value.trim().toUpperCase();
-    const alt = altitude.value;
-
-    if (!dep || !dest) {
-        alert("Please enter a departure and destination.");
-        return;
-    }
-
-    const now = new Date();
-
-    document.getElementById("weatherResult").innerHTML = `
-        <div class="decision-card">
-            <span class="decision-label">FLIGHT DECISION</span>
-            <strong>🟠 REVIEW</strong>
-            <p>Waiting for live weather data.</p>
+        <div>
+            <div class="eyebrow">FLIGHT PLANNING</div>
+            <h1>TAKEOFF</h1>
         </div>
 
-        <div class="weather-gates">
-
-            <article>
-                <div class="gate-dot amber"></div>
-                <div>
-                    <strong>Departure</strong>
-                    <p>${dep}</p>
-                </div>
-            </article>
-
-            <article>
-                <div class="gate-dot amber"></div>
-                <div>
-                    <strong>Destination</strong>
-                    <p>${dest}</p>
-                </div>
-            </article>
-
-            <article>
-                <div class="gate-dot amber"></div>
-                <div>
-                    <strong>Cruise</strong>
-                    <p>${alt || "Not entered"}</p>
-                </div>
-            </article>
-
+        <div class="app-badge">
+            <span>VFR</span>
+            <strong>Weather</strong>
         </div>
 
-        <div class="route-summary">
+    </header>
 
-            <div>
+
+    <main>
+
+        <section class="panel">
+
+            <h2>Flight Details</h2>
+
+            <div class="field">
+
+                <label for="departure">Departure</label>
+
+                <input
+                    id="departure"
+                    type="text"
+                    placeholder="NZCH"
+                    maxlength="4"
+                    autocomplete="off"
+                    autocapitalize="characters"
+                    spellcheck="false"
+                >
+
+            </div>
+
+
+            <div class="field">
+
+                <label for="destination">Destination</label>
+
+                <input
+                    id="destination"
+                    type="text"
+                    placeholder="NZAS"
+                    maxlength="4"
+                    autocomplete="off"
+                    autocapitalize="characters"
+                    spellcheck="false"
+                >
+
+            </div>
+
+
+            <div class="two-column">
+
+                <div class="field">
+
+                    <label for="altitude">Cruise Altitude</label>
+
+                    <input
+                        id="altitude"
+                        type="number"
+                        placeholder="6500"
+                        inputmode="numeric"
+                    >
+
+                </div>
+
+
+                <div class="field">
+
+                    <label for="departureTime">Departure Time</label>
+
+                    <input
+                        id="departureTime"
+                        type="time"
+                    >
+
+                </div>
+
+            </div>
+
+
+            <button
+                id="weatherButton"
+                class="primary-button"
+                type="button"
+            >
+                🌦 Get Weather Briefing
+            </button>
+
+        </section>
+
+
+        <section
+            id="decisionPanel"
+            class="decision-panel review"
+        >
+
+            <div class="decision-label">
+                FLIGHT DECISION
+            </div>
+
+            <div
+                id="decisionTitle"
+                class="decision-title"
+            >
+                🟠 REVIEW
+            </div>
+
+            <div
+                id="decisionMessage"
+                class="decision-message"
+            >
+                Enter a route and request live weather.
+            </div>
+
+        </section>
+
+
+        <section class="route-summary">
+
+            <article class="summary-card">
+
+                <div class="status-light"></div>
+
+                <div>
+                    <div class="summary-label">
+                        Departure
+                    </div>
+
+                    <div
+                        id="departureSummary"
+                        class="summary-value"
+                    >
+                        Not entered
+                    </div>
+                </div>
+
+            </article>
+
+
+            <article class="summary-card">
+
+                <div class="status-light"></div>
+
+                <div>
+                    <div class="summary-label">
+                        Destination
+                    </div>
+
+                    <div
+                        id="destinationSummary"
+                        class="summary-value"
+                    >
+                        Not entered
+                    </div>
+                </div>
+
+            </article>
+
+
+            <article class="summary-card">
+
+                <div class="status-light"></div>
+
+                <div>
+                    <div class="summary-label">
+                        Cruise
+                    </div>
+
+                    <div
+                        id="altitudeSummary"
+                        class="summary-value"
+                    >
+                        Not entered
+                    </div>
+                </div>
+
+            </article>
+
+        </section>
+
+
+        <section class="status-grid">
+
+            <div class="status-card">
+
                 <span>Status</span>
-                <strong>Awaiting Weather</strong>
+
+                <strong id="statusValue">
+                    Awaiting Weather
+                </strong>
+
             </div>
 
-            <div>
+
+            <div class="status-card">
+
                 <span>Warnings</span>
-                <strong>None</strong>
+
+                <strong id="warningsValue">
+                    None
+                </strong>
+
             </div>
 
-            <div>
+
+            <div class="status-card">
+
                 <span>Updated</span>
-                <strong>${now.toLocaleTimeString([], {
-                    hour: '2-digit',
-                    minute: '2-digit'
-                })}</strong>
+
+                <strong id="updatedValue">
+                    Not yet
+                </strong>
+
             </div>
 
-        </div>
-    `;
-})">
-🌦 Get Weather Briefing
-</button>
+        </section>
 
-<div class="secondary-actions">
 
-<button class="secondary-button" onclick="reverseRoute()">
-🔄 Reverse Route
-</button>
+        <section class="button-grid">
 
-<button class="secondary-button">
-💾 Saved Route
-</button>
+            <button
+                id="reverseButton"
+                class="secondary-button"
+                type="button"
+            >
+                🔄 Reverse Route
+            </button>
+
+
+            <button
+                id="saveButton"
+                class="secondary-button"
+                type="button"
+            >
+                💾 Save Route
+            </button>
+
+        </section>
+
+
+        <section class="panel weather-panel">
+
+            <div class="section-heading">
+
+                <h2>Weather Brief</h2>
+
+                <div
+                    id="weatherBadge"
+                    class="weather-badge"
+                >
+                    PENDING
+                </div>
+
+            </div>
+
+
+            <div
+                id="weatherResult"
+                class="weather-result"
+            >
+                Request a briefing to load live weather for the departure and destination.
+            </div>
+
+        </section>
+
+
+        <section class="panel supported-panel">
+
+            <h2>Supported Aerodromes</h2>
+
+            <p>
+                NZAA, NZAR, NZCH, NZDN, NZHK, NZHN, NZHT,
+                NZMF, NZNS, NZNV, NZPM, NZPP, NZQN, NZRO,
+                NZTG, NZTU, NZWB, NZWN and NZWR.
+            </p>
+
+        </section>
+
+    </main>
 
 </div>
 
-</div>
-
-
-<div class="panel">
-
-<div class="section-heading">
-<h2>Weather Brief</h2>
-<div id="statusChip" class="status-chip review">READY</div>
-</div>
-
-<div id="weatherResult" class="empty-state">
-
-Enter a departure and destination then tap
-<b>Get Weather Briefing</b>.
-
-</div>
-
-</div>
-
-
-<footer>
-<span>Takeoff v1.2</span>
-<span>Designed for iPad & iPhone</span>
-</footer>
-
-</div>
-
-<script src="app.js" defer></script>
+<script src="script.js"></script>
 
 </body>
 </html>
