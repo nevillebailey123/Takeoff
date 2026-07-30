@@ -1,6 +1,5 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
     <meta charset="UTF-8">
 
@@ -11,17 +10,14 @@
 
     <meta name="theme-color" content="#071525">
 
-    <title>TAKEOFF</title>
-
-    <link
-        rel="stylesheet"
-        href="style.css?v=30"
-    >
+    <title>Takeoff</title>
 
     <link
         rel="stylesheet"
         href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
     >
+
+    <link rel="stylesheet" href="style.css?v=30">
 </head>
 
 <body>
@@ -31,16 +27,13 @@
     <header class="topbar">
 
         <div>
-            <div class="eyebrow">
-                FLIGHT PLANNING
-            </div>
-
+            <div class="eyebrow">VFR FLIGHT PLANNING</div>
             <h1>TAKEOFF</h1>
         </div>
 
         <div class="app-badge">
-            <span>VFR</span>
-            <strong>Route Brief</strong>
+            <span>ROUTE</span>
+            <strong>Weather</strong>
         </div>
 
     </header>
@@ -48,17 +41,12 @@
 
     <main>
 
-        <!-- FLIGHT DETAILS -->
-
         <section class="panel">
 
             <h2>Flight Details</h2>
 
             <div class="field">
-
-                <label for="departure">
-                    Departure
-                </label>
+                <label for="departure">Departure</label>
 
                 <input
                     id="departure"
@@ -68,9 +56,7 @@
                     autocomplete="off"
                     autocapitalize="characters"
                 >
-
             </div>
-
 
             <button
                 id="reverseButton"
@@ -80,12 +66,8 @@
                 ⇅ Reverse Route
             </button>
 
-
             <div class="field">
-
-                <label for="destination">
-                    Destination
-                </label>
+                <label for="destination">Destination</label>
 
                 <input
                     id="destination"
@@ -95,14 +77,11 @@
                     autocomplete="off"
                     autocapitalize="characters"
                 >
-
             </div>
-
 
             <div class="two-column">
 
                 <div class="field">
-
                     <label for="altitude">
                         Cruise Altitude
                     </label>
@@ -111,14 +90,13 @@
                         id="altitude"
                         type="number"
                         placeholder="7500"
+                        min="0"
+                        max="25000"
                         inputmode="numeric"
                     >
-
                 </div>
 
-
                 <div class="field">
-
                     <label for="cruiseSpeed">
                         Cruise Speed
                     </label>
@@ -132,14 +110,11 @@
                         placeholder="110"
                         inputmode="numeric"
                     >
-
                 </div>
 
             </div>
 
-
             <div class="field">
-
                 <label for="departureTime">
                     Departure Time
                 </label>
@@ -148,9 +123,7 @@
                     id="departureTime"
                     type="time"
                 >
-
             </div>
-
 
             <button
                 id="saveButton"
@@ -160,19 +133,16 @@
                 Save Flight
             </button>
 
-
             <button
                 id="weatherButton"
                 class="primary-button"
                 type="button"
             >
-                🌦 Get Route Weather
+                🌦 Get Route Weather Briefing
             </button>
 
         </section>
 
-
-        <!-- STATUS -->
 
         <section class="status-strip">
 
@@ -185,10 +155,10 @@
             </div>
 
             <div>
-                <span>Warnings</span>
+                <span>Route Risk</span>
 
                 <strong id="warningsValue">
-                    None
+                    Not assessed
                 </strong>
             </div>
 
@@ -203,8 +173,6 @@
         </section>
 
 
-        <!-- DECISION PANEL -->
-
         <section
             id="decisionPanel"
             class="panel decision-panel"
@@ -212,9 +180,15 @@
 
             <div class="section-heading">
 
-                <h2 id="decisionTitle">
-                    Route Review
-                </h2>
+                <div>
+                    <div class="panel-eyebrow">
+                        ROUTE ASSESSMENT
+                    </div>
+
+                    <h2 id="decisionTitle">
+                        Flight Review
+                    </h2>
+                </div>
 
                 <span
                     id="weatherBadge"
@@ -226,61 +200,68 @@
             </div>
 
             <p id="decisionMessage">
-                Enter a departure and destination,
-                then request route weather.
+                Enter a departure and destination, then request a
+                route weather briefing.
             </p>
+
+            <div
+                id="riskDetails"
+                class="risk-details hidden"
+            ></div>
 
         </section>
 
-
-        <!-- ROUTE INFORMATION -->
 
         <section class="panel">
 
             <h2>Route Information</h2>
 
             <div class="summary-row">
-
                 <span>Distance</span>
 
                 <strong id="distanceValue">
                     Not calculated
                 </strong>
-
             </div>
 
-
             <div class="summary-row">
-
                 <span>Initial Track</span>
 
                 <strong id="bearingValue">
                     Not calculated
                 </strong>
-
             </div>
 
-
             <div class="summary-row">
-
                 <span>Estimated Time</span>
 
                 <strong id="flightTimeValue">
                     Not calculated
                 </strong>
+            </div>
 
+            <div class="summary-row">
+                <span>Weather Samples</span>
+
+                <strong id="sampleCountValue">
+                    Not calculated
+                </strong>
             </div>
 
         </section>
 
 
-        <!-- ROUTE MAP -->
-
         <section class="panel">
 
             <div class="section-heading">
 
-                <h2>Route Map</h2>
+                <div>
+                    <div class="panel-eyebrow">
+                        TRACK DISPLAY
+                    </div>
+
+                    <h2>Route Map</h2>
+                </div>
 
                 <span id="mapRouteLabel">
                     No route
@@ -293,18 +274,18 @@
             <div class="map-legend">
 
                 <span>
-                    <i class="legend-dot good-dot"></i>
+                    <i class="legend-dot low"></i>
                     Lower concern
                 </span>
 
                 <span>
-                    <i class="legend-dot review-dot"></i>
+                    <i class="legend-dot review"></i>
                     Review
                 </span>
 
                 <span>
-                    <i class="legend-dot bad-dot"></i>
-                    Higher concern
+                    <i class="legend-dot high"></i>
+                    High concern
                 </span>
 
             </div>
@@ -312,30 +293,29 @@
         </section>
 
 
-        <!-- ROUTE WEATHER -->
-
         <section class="panel">
 
             <div class="section-heading">
 
-                <h2>Weather Along Route</h2>
+                <div>
+                    <div class="panel-eyebrow">
+                        ALONG THE TRACK
+                    </div>
 
-                <span id="routeWeatherCount">
+                    <h2>Route Weather</h2>
+                </div>
+
+                <span id="routeWeatherStatus">
                     Not loaded
                 </span>
 
             </div>
 
-            <p class="section-intro">
-                TAKEOFF samples general forecast conditions
-                at several points along the direct route.
-            </p>
-
             <div id="routeWeatherResult">
 
                 <p class="muted-text">
-                    Request route weather to see conditions
-                    between departure and destination.
+                    Request a weather briefing to analyse conditions
+                    along the route.
                 </p>
 
             </div>
@@ -343,11 +323,9 @@
         </section>
 
 
-        <!-- ENDPOINT WEATHER -->
-
         <section class="panel">
 
-            <h2>Departure and Destination</h2>
+            <h2>Aerodrome Weather</h2>
 
             <div id="weatherResult">
 
@@ -360,98 +338,63 @@
         </section>
 
 
-        <!-- WORST POINT -->
-
-        <section class="panel">
-
-            <h2>Route Focus</h2>
-
-            <div id="routeFocusResult">
-
-                <p class="muted-text">
-                    No route-weather assessment is available yet.
-                </p>
-
-            </div>
-
-        </section>
-
-
-        <!-- FLIGHT SUMMARY -->
-
         <section class="panel">
 
             <h2>Flight Summary</h2>
 
             <div class="summary-row">
-
                 <span>Departure</span>
 
                 <strong id="departureSummary">
                     Not entered
                 </strong>
-
             </div>
 
-
             <div class="summary-row">
-
                 <span>Destination</span>
 
                 <strong id="destinationSummary">
                     Not entered
                 </strong>
-
             </div>
 
-
             <div class="summary-row">
-
                 <span>Altitude</span>
 
                 <strong id="altitudeSummary">
                     Not entered
                 </strong>
-
             </div>
 
-
             <div class="summary-row">
-
                 <span>Cruise Speed</span>
 
                 <strong id="speedSummary">
                     Not entered
                 </strong>
-
             </div>
 
-
             <div class="summary-row">
-
                 <span>Departure Time</span>
 
                 <strong id="timeSummary">
                     Not entered
                 </strong>
-
             </div>
 
         </section>
 
-
-        <!-- DISCLAIMER -->
 
         <section class="disclaimer">
 
             <strong>Important</strong>
 
             <p>
-                TAKEOFF displays general forecast-model data only.
-                It is not an official aviation weather briefing,
-                does not assess terrain clearance, cloud base,
-                visibility, turbulence, airspace or NOTAMs, and must
-                not be used as the sole basis for flight decisions.
+                TAKEOFF displays general model forecast information.
+                It is not an official aviation weather briefing and
+                must not be used as the sole basis for a flight decision.
+                Always check official aviation weather, NOTAMs, airspace
+                and operational information.
             </p>
 
         </section>
@@ -461,12 +404,9 @@
 </div>
 
 
-<script
-    src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
-></script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
 <script src="app.js?v=30"></script>
 
 </body>
-
 </html>
