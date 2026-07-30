@@ -283,38 +283,39 @@ function initialiseMap() {
     }
 
     if (typeof L === "undefined") {
-        console.error("Leaflet did not load.");
-
         mapElement.innerHTML = `
             <p class="error-text map-error">
-                The map library did not load.
-                Refresh the page and try again.
+                Map library failed to load.
             </p>
         `;
-
         return;
     }
 
-    routeMap = L.map(mapElement).setView(
-        [-42.2, 172.5],
-        5
+    routeMap = L.map("routeMap").setView(
+        [-43.5, 171.8],
+        6
     );
 
     L.tileLayer(
-        "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+        "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
         {
+            subdomains: ["a", "b", "c"],
             maxZoom: 19,
             attribution:
                 "&copy; OpenStreetMap contributors"
         }
     ).addTo(routeMap);
 
+    routeMap.whenReady(() => {
+        routeMap.invalidateSize();
+        updateRouteMap();
+    });
+
     window.setTimeout(() => {
         routeMap.invalidateSize();
         updateRouteMap();
-    }, 300);
+    }, 800);
 }
-
 
 function clearRouteMap() {
     if (!routeMap) {
