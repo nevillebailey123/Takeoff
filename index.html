@@ -1,6 +1,5 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
     <meta charset="UTF-8">
 
@@ -13,7 +12,12 @@
 
     <title>Takeoff</title>
 
-    <link rel="stylesheet" href="style.css?v=15">
+    <link rel="stylesheet" href="style.css?v=20">
+
+    <link
+        rel="stylesheet"
+        href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    >
 </head>
 
 <body>
@@ -34,6 +38,7 @@
 
     </header>
 
+
     <main>
 
         <section class="panel">
@@ -46,12 +51,20 @@
                 <input
                     id="departure"
                     type="text"
+                    placeholder="NZAS"
                     maxlength="4"
-                    placeholder="NZCH"
                     autocomplete="off"
                     autocapitalize="characters"
                 >
             </div>
+
+            <button
+                id="reverseButton"
+                class="secondary-button"
+                type="button"
+            >
+                ⇅ Reverse Route
+            </button>
 
             <div class="field">
                 <label for="destination">Destination</label>
@@ -59,26 +72,50 @@
                 <input
                     id="destination"
                     type="text"
+                    placeholder="NZHT"
                     maxlength="4"
-                    placeholder="NZQN"
                     autocomplete="off"
                     autocapitalize="characters"
                 >
             </div>
 
-            <div class="field">
-                <label for="altitude">Cruise Altitude</label>
+            <div class="two-column">
 
-                <input
-                    id="altitude"
-                    type="text"
-                    placeholder="6500"
-                    inputmode="numeric"
-                >
+                <div class="field">
+                    <label for="altitude">
+                        Cruise Altitude
+                    </label>
+
+                    <input
+                        id="altitude"
+                        type="number"
+                        placeholder="7500"
+                        inputmode="numeric"
+                    >
+                </div>
+
+                <div class="field">
+                    <label for="cruiseSpeed">
+                        Cruise Speed
+                    </label>
+
+                    <input
+                        id="cruiseSpeed"
+                        type="number"
+                        value="110"
+                        min="30"
+                        max="300"
+                        placeholder="110"
+                        inputmode="numeric"
+                    >
+                </div>
+
             </div>
 
             <div class="field">
-                <label for="departureTime">Departure Time</label>
+                <label for="departureTime">
+                    Departure Time
+                </label>
 
                 <input
                     id="departureTime"
@@ -87,99 +124,146 @@
             </div>
 
             <button
-                id="reverseButton"
-                class="secondary"
+                id="saveButton"
+                class="secondary-button"
                 type="button"
             >
-                🔄 Reverse Route
+                Save Flight
             </button>
 
             <button
                 id="weatherButton"
-                class="primary"
+                class="primary-button"
                 type="button"
             >
                 🌦 Get Weather Briefing
             </button>
 
-            <button
-                id="saveButton"
-                class="secondary"
-                type="button"
-            >
-                💾 Save Route
-            </button>
-
         </section>
 
-        <section class="panel">
 
-            <div class="section-heading">
-                <h2>Weather Briefing</h2>
+        <section class="status-strip">
 
-                <span
-                    id="weatherBadge"
-                    class="weather-badge"
-                >
-                    NOT LOADED
-                </span>
+            <div>
+                <span>Status</span>
+                <strong id="statusValue">
+                    Awaiting Weather
+                </strong>
             </div>
 
-            <div id="weatherResult">
-                <p>
-                    Enter a departure and destination, then tap
-                    <strong>Get Weather Briefing</strong>.
-                </p>
+            <div>
+                <span>Warnings</span>
+                <strong id="warningsValue">
+                    None
+                </strong>
+            </div>
+
+            <div>
+                <span>Updated</span>
+                <strong id="updatedValue">
+                    Not yet
+                </strong>
             </div>
 
         </section>
+
 
         <section
             id="decisionPanel"
             class="panel decision-panel"
         >
 
-            <h2 id="decisionTitle">
-                ⚪ WEATHER NOT REVIEWED
-            </h2>
+            <div class="section-heading">
+
+                <h2 id="decisionTitle">
+                    Flight Review
+                </h2>
+
+                <span
+                    id="weatherBadge"
+                    class="weather-badge"
+                >
+                    READY
+                </span>
+
+            </div>
 
             <p id="decisionMessage">
-                Load the weather to see a basic review of the general forecast.
+                Enter a departure and destination, then request
+                a weather briefing.
             </p>
 
         </section>
 
+
         <section class="panel">
-<section class="panel">
 
-    <h2>Route Information</h2>
+            <h2>Weather Briefing</h2>
 
-    <div class="summary-row">
-        <span>Distance</span>
-        <strong id="distanceValue">
-            Not calculated
-        </strong>
-    </div>
+            <div id="weatherResult">
+                <p class="muted-text">
+                    No weather has been requested yet.
+                </p>
+            </div>
 
-    <div class="summary-row">
-        <span>Initial Track</span>
-        <strong id="bearingValue">
-            Not calculated
-        </strong>
-    </div>
+        </section>
 
-    <div class="summary-row">
-        <span>Estimated Time</span>
-        <strong id="flightTimeValue">
-            Not calculated
-        </strong>
-    </div>
 
-</section>
+        <section class="panel">
+
+            <h2>Route Information</h2>
+
+            <div class="summary-row">
+                <span>Distance</span>
+
+                <strong id="distanceValue">
+                    Not calculated
+                </strong>
+            </div>
+
+            <div class="summary-row">
+                <span>Initial Track</span>
+
+                <strong id="bearingValue">
+                    Not calculated
+                </strong>
+            </div>
+
+            <div class="summary-row">
+                <span>Estimated Time</span>
+
+                <strong id="flightTimeValue">
+                    Not calculated
+                </strong>
+            </div>
+
+        </section>
+
+
+        <section class="panel">
+
+            <div class="section-heading">
+
+                <h2>Route Map</h2>
+
+                <span id="mapRouteLabel">
+                    No route
+                </span>
+
+            </div>
+
+            <div id="routeMap"></div>
+
+        </section>
+
+
+        <section class="panel">
+
             <h2>Flight Summary</h2>
 
             <div class="summary-row">
                 <span>Departure</span>
+
                 <strong id="departureSummary">
                     Not entered
                 </strong>
@@ -187,79 +271,39 @@
 
             <div class="summary-row">
                 <span>Destination</span>
+
                 <strong id="destinationSummary">
                     Not entered
                 </strong>
             </div>
 
             <div class="summary-row">
-                <span>Cruise Altitude</span>
+                <span>Altitude</span>
+
                 <strong id="altitudeSummary">
                     Not entered
                 </strong>
             </div>
-<div class="field">
 
-    <label for="cruiseSpeed">
-
-        Cruise Speed
-
-    </label>
-
-    <input
-
-        id="cruiseSpeed"
-
-        type="number"
-
-        value="110"
-
-        min="30"
-
-        max="300"
-
-        placeholder="110"
-
-        inputmode="numeric"
-
-    >
-
-</div>
             <div class="summary-row">
-                <span>Status</span>
-                <strong id="statusValue">
-                    Awaiting Weather
+                <span>Cruise Speed</span>
+
+                <strong id="speedSummary">
+                    Not entered
                 </strong>
             </div>
 
-            <div class="summary-row">
-                <span>Warnings</span>
-                <strong id="warningsValue">
-                    Not assessed
-                </strong>
-            </div>
-
-            <div class="summary-row">
-                <span>Updated</span>
-                <strong id="updatedValue">
-                    Not yet
-                </strong>
-            </div>
-<div class="summary-row">
-    <span>Cruise Speed</span>
-
-    <strong id="speedSummary">
-        Not entered
-    </strong>
-</div>
         </section>
 
-        <section class="panel disclaimer">
+
+        <section class="disclaimer">
+
+            <strong>Important</strong>
 
             <p>
-                This app uses general public forecast information only.
-                It is not an official aviation weather briefing and must
-                not be used as the sole basis for a flight decision.
+                TAKEOFF displays general forecast information only.
+                It is not an official aviation weather briefing and
+                must not be used as the sole basis for flight decisions.
             </p>
 
         </section>
@@ -268,7 +312,12 @@
 
 </div>
 
-<script src="app.js?v=16"></script>
+
+<script
+    src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js">
+</script>
+
+<script src="app.js?v=20"></script>
 
 </body>
 </html>
