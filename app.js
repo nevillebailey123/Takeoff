@@ -1,16 +1,10 @@
 "use strict";
 
-// TAKEOFF v1.4
-// General forecast information only. Not an official aviation briefing.
+// TAKEOFF v1.5
+// General forecast information only.
+// Not an official aviation weather briefing.
 
 const $ = (id) => document.getElementById(id);
-
-const departure = $("departure");
-const destination = $("destination");
-const altitude = $("altitude");
-const departureTime = $("departureTime");
-const weatherButton = $("weatherButton");
-const weatherResult = $("weatherResult");
 
 const aerodromes = {
     NZAA: { name: "Auckland", lat: -37.0082, lon: 174.7850 },
@@ -37,17 +31,59 @@ const aerodromes = {
     NZWR: { name: "Whangārei", lat: -35.7683, lon: 174.3650 }
 };
 
+let departure;
+let destination;
+let altitude;
+let departureTime;
+let weatherButton;
+let weatherResult;
+
 function normaliseCode(value) {
-    return value.trim().toUpperCase();
+    return String(value || "").trim().toUpperCase();
+}
+
+function setText(id, value) {
+    const element = $(id);
+
+    if (element) {
+        element.textContent = value;
+    }
+}
+
+function setClass(id, className) {
+    const element = $(id);
+
+    if (element) {
+        element.className = className;
+    }
 }
 
 function updateSummary() {
-    $("departureSummary").textContent = normaliseCode(departure.value) || "Not entered";
-    $("destinationSummary").textContent = normaliseCode(destination.value) || "Not entered";
-    $("altitudeSummary").textContent = altitude.value ? `${altitude.value} ft` : "Not entered";
+    if (!departure || !destination || !altitude) {
+        return;
+    }
+
+    setText(
+        "departureSummary",
+        normaliseCode(departure.value) || "Not entered"
+    );
+
+    setText(
+        "destinationSummary",
+        normaliseCode(destination.value) || "Not entered"
+    );
+
+    setText(
+        "altitudeSummary",
+        altitude.value ? `${altitude.value} ft` : "Not entered"
+    );
 }
 
 function saveFlight(showConfirmation = false) {
+    if (!departure || !destination || !altitude || !departureTime) {
+        return;
+    }
+
     const flight = {
         departure: normaliseCode(departure.value),
         destination: normaliseCode(destination.value),
@@ -55,42 +91,74 @@ function saveFlight(showConfirmation = false) {
         departureTime: departureTime.value
     };
 
-    localStorage.setItem("lastFlight", JSON.stringify(flight));
+    try {
+        localStorage.setItem("lastFlight", JSON.stringify(flight));
+    } catch (error) {
+        console.warn("Could not save flight", error);
+    }
+
     updateSummary();
 
     if (showConfirmation) {
-        $("statusValue").textContent = "Route Saved";
+        setText("statusValue", "Route Saved");
+
         window.setTimeout(() => {
-            if ($("statusValue").textContent === "Route Saved") {
-                $("statusValue").textContent = "Awaiting Weather";
+            const statusValue = $("statusValue");
+
+            if (
+                statusValue &&
+                statusValue.textContent === "Route Saved"
+            ) {
+                statusValue.textContent = "Awaiting Weather";
             }
         }, 1600);
     }
 }
 
 function loadFlight() {
+    if (!departure || !destination || !altitude || !departureTime) {
+        return;
+    }
+
     try {
         const saved = localStorage.getItem("lastFlight");
+
         if (!saved) {
             updateSummary();
             return;
         }
 
         const flight = JSON.parse(saved);
+
         departure.value = flight.departure || "";
         destination.value = flight.destination || "";
         altitude.value = flight.altitude || "";
         departureTime.value = flight.departureTime || "";
+
         updateSummary();
     } catch (error) {
         console.warn("Could not load saved flight", error);
-        localStorage.removeItem("lastFlight");
+
+        try {
+            localStorage.removeItem("lastFlight");
+        } catch (storageError) {
+            console.warn("Could not clear saved flight", storageError);
+        }
+
         updateSummary();
     }
 }
 
 function reverseRoute() {
-    [departure.value, destination.value] = [destination.value, departure.value];
+    if (!departure || !destination) {
+        return;
+    }
+
+    const oldDeparture = departure.value;
+
+    departure.value = destination.value;
+    destination.value = oldDeparture;
+
     saveFlight();
 }
 
@@ -117,23 +185,50 @@ function makeWeatherUrl(airport) {
 
 async function fetchAirportWeather(code) {
     const airport = aerodromes[code];
-    const response = await fetch(makeWeatherUrl(airport), { cache: "no-store" });
+
+    if (!airport) {
+        throw new Error(`Unsupported aerodrome: ${code}`);
+    }
+
+    const response = await fetch(makeWeatherUrl(airport), {
+        cache: "no-store"
+    });
 
     if (!response.ok) {
-        throw new Error(`Weather service returned ${response.status}`);
+        throw new Error(
+            `Weather service returned ${response.status}`
+        );
     }
 
     const data = await response.json();
+
     if (!data.current) {
         throw new Error("Weather data was incomplete");
     }
 
-    return { code, airport, current: data.current };
+    return {
+        code,
+        airport,
+        current: data.current
+    };
 }
 
 function compassDirection(degrees) {
-    if (!Number.isFinite(degrees)) return "–";
-    const points = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
+    if (!Number.isFinite(degrees)) {
+        return "–";
+    }
+
+    const points = [
+        "N",
+        "NE",
+        "E",
+        "SE",
+        "S",
+        "SW",
+        "W",
+        "NW"
+    ];
+
     return points[Math.round(degrees / 45) % 8];
 }
 
@@ -161,94 +256,207 @@ function weatherDescription(code) {
         96: "Thunderstorm with hail",
         99: "Thunderstorm with hail"
     };
+
     return descriptions[code] || "Forecast available";
 }
 
+function safeNumber(value, fallback = 0) {
+    const number = Number(value);
+
+    return Number.isFinite(number) ? number : fallback;
+}
+
 function renderAirportWeather(item) {
-    const w = item.current;
-    const wind = Number(w.wind_speed_10m);
-    const gust = Number(w.wind_gusts_10m);
-    const direction = Number(w.wind_direction_10m);
-    const cloud = Number(w.cloud_cover);
-    const precipitation = Number(w.precipitation);
+    const weather = item.current;
+
+    const temperature = safeNumber(weather.temperature_2m);
+    const apparentTemperature = safeNumber(
+        weather.apparent_temperature
+    );
+    const wind = safeNumber(weather.wind_speed_10m);
+    const gust = safeNumber(weather.wind_gusts_10m);
+    const direction = safeNumber(weather.wind_direction_10m);
+    const cloud = safeNumber(weather.cloud_cover);
+    const precipitation = safeNumber(weather.precipitation);
+    const weatherCode = safeNumber(weather.weather_code);
 
     return `
         <article class="weather-card">
-            <div class="airport-name">${item.code} · ${item.airport.name}</div>
-            <h3>${weatherDescription(Number(w.weather_code))}</h3>
-            <p>🌡 <strong>${Math.round(Number(w.temperature_2m))}°C</strong> · feels ${Math.round(Number(w.apparent_temperature))}°C</p>
-            <p>💨 <strong>${Math.round(direction).toString().padStart(3, "0")}° ${compassDirection(direction)} at ${Math.round(wind)} kt</strong></p>
+            <div class="airport-name">
+                ${item.code} · ${item.airport.name}
+            </div>
+
+            <h3>
+                ${weatherDescription(weatherCode)}
+            </h3>
+
+            <p>
+                🌡
+                <strong>${Math.round(temperature)}°C</strong>
+                · feels ${Math.round(apparentTemperature)}°C
+            </p>
+
+            <p>
+                💨
+                <strong>
+                    ${Math.round(direction)
+                        .toString()
+                        .padStart(3, "0")}°
+                    ${compassDirection(direction)}
+                    at ${Math.round(wind)} kt
+                </strong>
+            </p>
+
             <p>↗️ Gusts ${Math.round(gust)} kt</p>
+
             <p>☁️ Cloud cover ${Math.round(cloud)}%</p>
-            <p>🌧 Precipitation ${precipitation.toFixed(1)} mm</p>
+
+            <p>
+                🌧 Precipitation
+                ${precipitation.toFixed(1)} mm
+            </p>
         </article>
     `;
 }
 
 function assessWeather(items) {
     const values = items.map(({ current }) => ({
-        wind: Number(current.wind_speed_10m),
-        gust: Number(current.wind_gusts_10m),
-        cloud: Number(current.cloud_cover),
-        precipitation: Number(current.precipitation),
-        code: Number(current.weather_code)
+        wind: safeNumber(current.wind_speed_10m),
+        gust: safeNumber(current.wind_gusts_10m),
+        cloud: safeNumber(current.cloud_cover),
+        precipitation: safeNumber(current.precipitation),
+        code: safeNumber(current.weather_code)
     }));
 
-    const severeCode = values.some((v) => [65, 75, 82, 95, 96, 99].includes(v.code));
-    const highConcern = values.some((v) => v.gust >= 30 || v.wind >= 22 || v.precipitation >= 4) || severeCode;
-    const review = values.some((v) => v.gust >= 20 || v.wind >= 15 || v.cloud >= 85 || v.precipitation > 0);
+    const severeCode = values.some((value) =>
+        [65, 75, 82, 95, 96, 99].includes(value.code)
+    );
+
+    const highConcern =
+        values.some(
+            (value) =>
+                value.gust >= 30 ||
+                value.wind >= 22 ||
+                value.precipitation >= 4
+        ) || severeCode;
+
+    const review = values.some(
+        (value) =>
+            value.gust >= 20 ||
+            value.wind >= 15 ||
+            value.cloud >= 85 ||
+            value.precipitation > 0
+    );
 
     const panel = $("decisionPanel");
-    panel.classList.remove("good", "review", "bad");
+
+    if (panel) {
+        panel.classList.remove("good", "review", "bad");
+    }
 
     if (highConcern) {
-        panel.classList.add("bad");
-        $("decisionTitle").textContent = "🔴 HIGH CONCERN";
-        $("decisionMessage").textContent = "General forecast data flags stronger wind, gusts, precipitation or significant weather. Check official aviation sources before making any decision.";
-        $("warningsValue").textContent = "Weather flags";
+        if (panel) {
+            panel.classList.add("bad");
+        }
+
+        setText("decisionTitle", "🔴 HIGH CONCERN");
+
+        setText(
+            "decisionMessage",
+            "General forecast data flags stronger wind, gusts, precipitation or significant weather. Check official aviation sources before making any decision."
+        );
+
+        setText("warningsValue", "Weather flags");
         return;
     }
 
     if (review) {
-        panel.classList.add("review");
-        $("decisionTitle").textContent = "🟠 REVIEW";
-        $("decisionMessage").textContent = "Some general forecast elements deserve a closer look. Confirm the full picture using official aviation weather and NOTAM sources.";
-        $("warningsValue").textContent = "Review required";
+        if (panel) {
+            panel.classList.add("review");
+        }
+
+        setText("decisionTitle", "🟠 REVIEW");
+
+        setText(
+            "decisionMessage",
+            "Some general forecast elements deserve a closer look. Confirm the full picture using official aviation weather and NOTAM sources."
+        );
+
+        setText("warningsValue", "Review required");
         return;
     }
 
-    panel.classList.add("good");
-    $("decisionTitle").textContent = "🟢 LOWER CONCERN";
-    $("decisionMessage").textContent = "No obvious concern was found in this limited general forecast snapshot. This is not a flight-release or go/no-go recommendation.";
-    $("warningsValue").textContent = "None detected";
+    if (panel) {
+        panel.classList.add("good");
+    }
+
+    setText("decisionTitle", "🟢 LOWER CONCERN");
+
+    setText(
+        "decisionMessage",
+        "No obvious concern was found in this limited general forecast snapshot. This is not a flight-release or go/no-go recommendation."
+    );
+
+    setText("warningsValue", "None detected");
+}
+
+function showRouteError(missingCodes) {
+    setText("weatherBadge", "CHECK ROUTE");
+    setClass("weatherBadge", "weather-badge error");
+    setText("statusValue", "Route Error");
+
+    if (weatherResult) {
+        weatherResult.innerHTML = `
+            <p class="error-text">
+                Unsupported aerodrome:
+                ${missingCodes.join(" and ")}.
+                Use one of the supported four-letter codes.
+            </p>
+        `;
+    }
 }
 
 async function getWeather() {
+    if (!departure || !destination) {
+        return;
+    }
+
     const depCode = normaliseCode(departure.value);
     const destCode = normaliseCode(destination.value);
 
     departure.value = depCode;
     destination.value = destCode;
+
     saveFlight();
 
-    if (!aerodromes[depCode] || !aerodromes[destCode]) {
-        const missing = [];
-        if (!aerodromes[depCode]) missing.push(depCode || "departure");
-        if (!aerodromes[destCode]) missing.push(destCode || "destination");
+    const missing = [];
 
-        $("weatherBadge").textContent = "CHECK ROUTE";
-        $("weatherBadge").className = "weather-badge error";
-        $("statusValue").textContent = "Route Error";
-        weatherResult.innerHTML = `<p class="error-text">Unsupported aerodrome: ${missing.join(" and ")}. Use one of the codes listed below.</p>`;
+    if (!aerodromes[depCode]) {
+        missing.push(depCode || "departure");
+    }
+
+    if (!aerodromes[destCode]) {
+        missing.push(destCode || "destination");
+    }
+
+    if (missing.length > 0) {
+        showRouteError(missing);
         return;
     }
 
-    weatherButton.disabled = true;
-    weatherButton.textContent = "Loading weather…";
-    $("weatherBadge").textContent = "LOADING";
-    $("weatherBadge").className = "weather-badge";
-    $("statusValue").textContent = "Loading Weather";
-    weatherResult.innerHTML = "<p>Contacting the forecast service…</p>";
+    if (weatherButton) {
+        weatherButton.disabled = true;
+        weatherButton.textContent = "Loading weather…";
+    }
+
+    setText("weatherBadge", "LOADING");
+    setClass("weatherBadge", "weather-badge");
+    setText("statusValue", "Loading Weather");
+
+    if (weatherResult) {
+        weatherResult.innerHTML =
+            "<p>Contacting the forecast service…</p>";
+    }
 
     try {
         const items = await Promise.all([
@@ -256,42 +464,113 @@ async function getWeather() {
             fetchAirportWeather(destCode)
         ]);
 
-        weatherResult.innerHTML = `<div class="weather-grid">${items.map(renderAirportWeather).join("")}</div>`;
+        if (weatherResult) {
+            weatherResult.innerHTML = `
+                <div class="weather-grid">
+                    ${items.map(renderAirportWeather).join("")}
+                </div>
+            `;
+        }
+
         assessWeather(items);
 
-        $("weatherBadge").textContent = "LIVE";
-        $("weatherBadge").className = "weather-badge live";
-        $("statusValue").textContent = "Forecast Loaded";
-        $("updatedValue").textContent = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+        setText("weatherBadge", "LIVE");
+        setClass("weatherBadge", "weather-badge live");
+        setText("statusValue", "Forecast Loaded");
+
+        setText(
+            "updatedValue",
+            new Date().toLocaleTimeString([], {
+                hour: "2-digit",
+                minute: "2-digit"
+            })
+        );
     } catch (error) {
         console.error(error);
-        $("weatherBadge").textContent = "ERROR";
-        $("weatherBadge").className = "weather-badge error";
-        $("statusValue").textContent = "Weather Error";
-        $("warningsValue").textContent = "Service unavailable";
-        weatherResult.innerHTML = "<p class=\"error-text\">Unable to retrieve weather right now. Check your internet connection and try again.</p>";
+
+        setText("weatherBadge", "ERROR");
+        setClass("weatherBadge", "weather-badge error");
+        setText("statusValue", "Weather Error");
+        setText("warningsValue", "Service unavailable");
+
+        if (weatherResult) {
+            weatherResult.innerHTML = `
+                <p class="error-text">
+                    Unable to retrieve weather right now.
+                    Check your internet connection and try again.
+                </p>
+            `;
+        }
     } finally {
-        weatherButton.disabled = false;
-        weatherButton.textContent = "🌦 Get Weather Briefing";
+        if (weatherButton) {
+            weatherButton.disabled = false;
+            weatherButton.textContent =
+                "🌦 Get Weather Briefing";
+        }
     }
 }
 
-$("weatherButton").addEventListener("click", getWeather);
-$("reverseButton").addEventListener("click", reverseRoute);
-$("saveButton").addEventListener("click", () => saveFlight(true));
+function initialiseApp() {
+    departure = $("departure");
+    destination = $("destination");
+    altitude = $("altitude");
+    departureTime = $("departureTime");
+    weatherButton = $("weatherButton");
+    weatherResult = $("weatherResult");
 
-document.querySelectorAll("input").forEach((input) => {
-    input.addEventListener("input", () => saveFlight());
-});
+    const reverseButton = $("reverseButton");
+    const saveButton = $("saveButton");
 
-departure.addEventListener("blur", () => {
-    departure.value = normaliseCode(departure.value);
-    saveFlight();
-});
+    if (
+        !departure ||
+        !destination ||
+        !altitude ||
+        !departureTime
+    ) {
+        console.error(
+            "TAKEOFF could not start because one or more flight input fields are missing."
+        );
 
-destination.addEventListener("blur", () => {
-    destination.value = normaliseCode(destination.value);
-    saveFlight();
-});
+        return;
+    }
 
-loadFlight();
+    if (weatherButton) {
+        weatherButton.addEventListener("click", getWeather);
+    }
+
+    if (reverseButton) {
+        reverseButton.addEventListener(
+            "click",
+            reverseRoute
+        );
+    }
+
+    if (saveButton) {
+        saveButton.addEventListener("click", () => {
+            saveFlight(true);
+        });
+    }
+
+    document.querySelectorAll("input").forEach((input) => {
+        input.addEventListener("input", () => {
+            saveFlight();
+        });
+    });
+
+    departure.addEventListener("blur", () => {
+        departure.value = normaliseCode(departure.value);
+        saveFlight();
+    });
+
+    destination.addEventListener("blur", () => {
+        destination.value = normaliseCode(destination.value);
+        saveFlight();
+    });
+
+    loadFlight();
+}
+
+document.addEventListener(
+    "DOMContentLoaded",
+    initialiseApp
+);
