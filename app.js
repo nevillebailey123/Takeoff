@@ -42,3 +42,26 @@ document.querySelectorAll("input").forEach(input => {
 });
 
 window.onload = loadFlight;
+async function getWeather() {
+
+    const dep = departure.value;
+    const dest = destination.value;
+
+    document.getElementById("weatherResult").innerHTML =
+        "Loading weather...";
+
+    // Temporary demo
+
+    document.getElementById("weatherResult").innerHTML = `
+        <h3>Weather Brief</h3>
+
+        Departure: ${dep}<br>
+        Destination: ${dest}<br><br>
+
+        🌤 VFR<br>
+        💨 NW 15 kt<br>
+        ☁️ SCT 5000 ft<br>
+        🌧 Nil<br>
+        👀 Visibility 20 km
+    `;
+}
