@@ -1,4 +1,4 @@
-"use strict";
+
 
 // TAKEOFF v1.4
 // General forecast information only. Not an official aviation briefing.
