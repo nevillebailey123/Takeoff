@@ -1,4 +1,4 @@
-
+"use strict";
 
 // TAKEOFF v1.4
 // General forecast information only. Not an official aviation briefing.
@@ -32,9 +32,9 @@ const aerodromes = {
     NZTG: { name: "Tauranga", lat: -37.6719, lon: 176.1960 },
     NZTU: { name: "Gisborne", lat: -38.6633, lon: 177.9783 },
     NZWB: { name: "Woodbourne", lat: -41.5183, lon: 173.8700 },
-    NZWF: { name: "WÄnaka", lat: -44.7222, lon: 169.2456 },
+    NZWF: { name: "Wānaka", lat: -44.7222, lon: 169.2456 },
     NZWN: { name: "Wellington", lat: -41.3272, lon: 174.8053 },
-    NZWR: { name: "WhangÄrei", lat: -35.7683, lon: 174.3650 }
+    NZWR: { name: "Whangārei", lat: -35.7683, lon: 174.3650 }
 };
 
 function normaliseCode(value) {
@@ -132,7 +132,7 @@ async function fetchAirportWeather(code) {
 }
 
 function compassDirection(degrees) {
-    if (!Number.isFinite(degrees)) return "â";
+    if (!Number.isFinite(degrees)) return "–";
     const points = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
     return points[Math.round(degrees / 45) % 8];
 }
@@ -174,13 +174,13 @@ function renderAirportWeather(item) {
 
     return `
         <article class="weather-card">
-            <div class="airport-name">${item.code} Â· ${item.airport.name}</div>
+            <div class="airport-name">${item.code} · ${item.airport.name}</div>
             <h3>${weatherDescription(Number(w.weather_code))}</h3>
-            <p>ð¡ <strong>${Math.round(Number(w.temperature_2m))}Â°C</strong> Â· feels ${Math.round(Number(w.apparent_temperature))}Â°C</p>
-            <p>ð¨ <strong>${Math.round(direction).toString().padStart(3, "0")}Â° ${compassDirection(direction)} at ${Math.round(wind)} kt</strong></p>
-            <p>âï¸ Gusts ${Math.round(gust)} kt</p>
-            <p>âï¸ Cloud cover ${Math.round(cloud)}%</p>
-            <p>ð§ Precipitation ${precipitation.toFixed(1)} mm</p>
+            <p>🌡 <strong>${Math.round(Number(w.temperature_2m))}°C</strong> · feels ${Math.round(Number(w.apparent_temperature))}°C</p>
+            <p>💨 <strong>${Math.round(direction).toString().padStart(3, "0")}° ${compassDirection(direction)} at ${Math.round(wind)} kt</strong></p>
+            <p>↗️ Gusts ${Math.round(gust)} kt</p>
+            <p>☁️ Cloud cover ${Math.round(cloud)}%</p>
+            <p>🌧 Precipitation ${precipitation.toFixed(1)} mm</p>
         </article>
     `;
 }
@@ -203,7 +203,7 @@ function assessWeather(items) {
 
     if (highConcern) {
         panel.classList.add("bad");
-        $("decisionTitle").textContent = "ð´ HIGH CONCERN";
+        $("decisionTitle").textContent = "🔴 HIGH CONCERN";
         $("decisionMessage").textContent = "General forecast data flags stronger wind, gusts, precipitation or significant weather. Check official aviation sources before making any decision.";
         $("warningsValue").textContent = "Weather flags";
         return;
@@ -211,14 +211,14 @@ function assessWeather(items) {
 
     if (review) {
         panel.classList.add("review");
-        $("decisionTitle").textContent = "ð  REVIEW";
+        $("decisionTitle").textContent = "🟠 REVIEW";
         $("decisionMessage").textContent = "Some general forecast elements deserve a closer look. Confirm the full picture using official aviation weather and NOTAM sources.";
         $("warningsValue").textContent = "Review required";
         return;
     }
 
     panel.classList.add("good");
-    $("decisionTitle").textContent = "ð¢ LOWER CONCERN";
+    $("decisionTitle").textContent = "🟢 LOWER CONCERN";
     $("decisionMessage").textContent = "No obvious concern was found in this limited general forecast snapshot. This is not a flight-release or go/no-go recommendation.";
     $("warningsValue").textContent = "None detected";
 }
@@ -244,11 +244,11 @@ async function getWeather() {
     }
 
     weatherButton.disabled = true;
-    weatherButton.textContent = "Loading weatherâ¦";
+    weatherButton.textContent = "Loading weather…";
     $("weatherBadge").textContent = "LOADING";
     $("weatherBadge").className = "weather-badge";
     $("statusValue").textContent = "Loading Weather";
-    weatherResult.innerHTML = "<p>Contacting the forecast serviceâ¦</p>";
+    weatherResult.innerHTML = "<p>Contacting the forecast service…</p>";
 
     try {
         const items = await Promise.all([
@@ -272,7 +272,7 @@ async function getWeather() {
         weatherResult.innerHTML = "<p class=\"error-text\">Unable to retrieve weather right now. Check your internet connection and try again.</p>";
     } finally {
         weatherButton.disabled = false;
-        weatherButton.textContent = "ð¦ Get Weather Briefing";
+        weatherButton.textContent = "🌦 Get Weather Briefing";
     }
 }
 
