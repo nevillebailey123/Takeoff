@@ -1,6 +1,6 @@
 "use strict";
 
-// TAKEOFF v1.5
+// TAKEOFF v1.6
 // General forecast information only.
 // Not an official aviation weather briefing.
 
@@ -35,6 +35,7 @@ let departure;
 let destination;
 let altitude;
 let departureTime;
+let cruiseSpeed;
 let weatherButton;
 let weatherResult;
 
@@ -58,11 +59,113 @@ function setClass(id, className) {
     }
 }
 
-function updateSummary() {
-    if (!departure || !destination || !altitude) {
+function toRadians(degrees) {
+    return degrees * Math.PI / 180;
+}
+
+function toDegrees(radians) {
+    return radians * 180 / Math.PI;
+}
+
+function calculateDistanceNm(start, end) {
+    const earthRadiusNm = 3440.065;
+
+    const lat1 = toRadians(start.lat);
+    const lat2 = toRadians(end.lat);
+    const deltaLat = toRadians(end.lat - start.lat);
+    const deltaLon = toRadians(end.lon - start.lon);
+
+    const a =
+        Math.sin(deltaLat / 2) ** 2 +
+        Math.cos(lat1) *
+        Math.cos(lat2) *
+        Math.sin(deltaLon / 2) ** 2;
+
+    const c = 2 * Math.atan2(
+        Math.sqrt(a),
+        Math.sqrt(1 - a)
+    );
+
+    return earthRadiusNm * c;
+}
+
+function calculateBearing(start, end) {
+    const lat1 = toRadians(start.lat);
+    const lat2 = toRadians(end.lat);
+    const deltaLon = toRadians(end.lon - start.lon);
+
+    const y = Math.sin(deltaLon) * Math.cos(lat2);
+
+    const x =
+        Math.cos(lat1) * Math.sin(lat2) -
+        Math.sin(lat1) *
+        Math.cos(lat2) *
+        Math.cos(deltaLon);
+
+    return (toDegrees(Math.atan2(y, x)) + 360) % 360;
+}
+
+function formatFlightTime(hours) {
+    if (!Number.isFinite(hours) || hours <= 0) {
+        return "Not calculated";
+    }
+
+    const totalMinutes = Math.round(hours * 60);
+    const flightHours = Math.floor(totalMinutes / 60);
+    const minutes = totalMinutes % 60;
+
+    if (flightHours === 0) {
+        return `${minutes} min`;
+    }
+
+    return `${flightHours} hr ${minutes
+        .toString()
+        .padStart(2, "0")} min`;
+}
+
+function calculateRoute() {
+    const depCode = normaliseCode(departure.value);
+    const destCode = normaliseCode(destination.value);
+
+    const start = aerodromes[depCode];
+    const end = aerodromes[destCode];
+
+    if (!start || !end) {
+        setText("distanceValue", "Not calculated");
+        setText("bearingValue", "Not calculated");
+        setText("flightTimeValue", "Not calculated");
         return;
     }
 
+    const distance = calculateDistanceNm(start, end);
+    const bearing = calculateBearing(start, end);
+
+    const speed = Number(cruiseSpeed.value);
+    const flightTime = speed > 0
+        ? distance / speed
+        : null;
+
+    setText(
+        "distanceValue",
+        `${Math.round(distance)} NM`
+    );
+
+    setText(
+        "bearingValue",
+        `${Math.round(bearing)
+            .toString()
+            .padStart(3, "0")}° true`
+    );
+
+    setText(
+        "flightTimeValue",
+        flightTime
+            ? formatFlightTime(flightTime)
+            : "Enter cruise speed"
+    );
+}
+
+function updateSummary() {
     setText(
         "departureSummary",
         normaliseCode(departure.value) || "Not entered"
@@ -75,24 +178,35 @@ function updateSummary() {
 
     setText(
         "altitudeSummary",
-        altitude.value ? `${altitude.value} ft` : "Not entered"
+        altitude.value
+            ? `${altitude.value} ft`
+            : "Not entered"
     );
+
+    setText(
+        "speedSummary",
+        cruiseSpeed.value
+            ? `${cruiseSpeed.value} kt`
+            : "Not entered"
+    );
+
+    calculateRoute();
 }
 
 function saveFlight(showConfirmation = false) {
-    if (!departure || !destination || !altitude || !departureTime) {
-        return;
-    }
-
     const flight = {
         departure: normaliseCode(departure.value),
         destination: normaliseCode(destination.value),
         altitude: altitude.value,
-        departureTime: departureTime.value
+        departureTime: departureTime.value,
+        cruiseSpeed: cruiseSpeed.value
     };
 
     try {
-        localStorage.setItem("lastFlight", JSON.stringify(flight));
+        localStorage.setItem(
+            "lastFlight",
+            JSON.stringify(flight)
+        );
     } catch (error) {
         console.warn("Could not save flight", error);
     }
@@ -103,23 +217,19 @@ function saveFlight(showConfirmation = false) {
         setText("statusValue", "Route Saved");
 
         window.setTimeout(() => {
-            const statusValue = $("statusValue");
+            const status = $("statusValue");
 
             if (
-                statusValue &&
-                statusValue.textContent === "Route Saved"
+                status &&
+                status.textContent === "Route Saved"
             ) {
-                statusValue.textContent = "Awaiting Weather";
+                status.textContent = "Awaiting Weather";
             }
         }, 1600);
     }
 }
 
 function loadFlight() {
-    if (!departure || !destination || !altitude || !departureTime) {
-        return;
-    }
-
     try {
         const saved = localStorage.getItem("lastFlight");
 
@@ -134,26 +244,16 @@ function loadFlight() {
         destination.value = flight.destination || "";
         altitude.value = flight.altitude || "";
         departureTime.value = flight.departureTime || "";
+        cruiseSpeed.value = flight.cruiseSpeed || "110";
 
         updateSummary();
     } catch (error) {
         console.warn("Could not load saved flight", error);
-
-        try {
-            localStorage.removeItem("lastFlight");
-        } catch (storageError) {
-            console.warn("Could not clear saved flight", storageError);
-        }
-
         updateSummary();
     }
 }
 
 function reverseRoute() {
-    if (!departure || !destination) {
-        return;
-    }
-
     const oldDeparture = departure.value;
 
     departure.value = destination.value;
@@ -186,13 +286,10 @@ function makeWeatherUrl(airport) {
 async function fetchAirportWeather(code) {
     const airport = aerodromes[code];
 
-    if (!airport) {
-        throw new Error(`Unsupported aerodrome: ${code}`);
-    }
-
-    const response = await fetch(makeWeatherUrl(airport), {
-        cache: "no-store"
-    });
+    const response = await fetch(
+        makeWeatherUrl(airport),
+        { cache: "no-store" }
+    );
 
     if (!response.ok) {
         throw new Error(
@@ -263,25 +360,49 @@ function weatherDescription(code) {
 function safeNumber(value, fallback = 0) {
     const number = Number(value);
 
-    return Number.isFinite(number) ? number : fallback;
+    return Number.isFinite(number)
+        ? number
+        : fallback;
 }
 
 function renderAirportWeather(item) {
     const weather = item.current;
 
-    const temperature = safeNumber(weather.temperature_2m);
-    const apparentTemperature = safeNumber(
+    const temperature = safeNumber(
+        weather.temperature_2m
+    );
+
+    const apparent = safeNumber(
         weather.apparent_temperature
     );
-    const wind = safeNumber(weather.wind_speed_10m);
-    const gust = safeNumber(weather.wind_gusts_10m);
-    const direction = safeNumber(weather.wind_direction_10m);
-    const cloud = safeNumber(weather.cloud_cover);
-    const precipitation = safeNumber(weather.precipitation);
-    const weatherCode = safeNumber(weather.weather_code);
+
+    const wind = safeNumber(
+        weather.wind_speed_10m
+    );
+
+    const gust = safeNumber(
+        weather.wind_gusts_10m
+    );
+
+    const direction = safeNumber(
+        weather.wind_direction_10m
+    );
+
+    const cloud = safeNumber(
+        weather.cloud_cover
+    );
+
+    const precipitation = safeNumber(
+        weather.precipitation
+    );
+
+    const weatherCode = safeNumber(
+        weather.weather_code
+    );
 
     return `
         <article class="weather-card">
+
             <div class="airport-name">
                 ${item.code} · ${item.airport.name}
             </div>
@@ -292,8 +413,10 @@ function renderAirportWeather(item) {
 
             <p>
                 🌡
-                <strong>${Math.round(temperature)}°C</strong>
-                · feels ${Math.round(apparentTemperature)}°C
+                <strong>
+                    ${Math.round(temperature)}°C
+                </strong>
+                · feels ${Math.round(apparent)}°C
             </p>
 
             <p>
@@ -307,14 +430,19 @@ function renderAirportWeather(item) {
                 </strong>
             </p>
 
-            <p>↗️ Gusts ${Math.round(gust)} kt</p>
+            <p>
+                ↗️ Gusts ${Math.round(gust)} kt
+            </p>
 
-            <p>☁️ Cloud cover ${Math.round(cloud)}%</p>
+            <p>
+                ☁️ Cloud cover ${Math.round(cloud)}%
+            </p>
 
             <p>
                 🌧 Precipitation
                 ${precipitation.toFixed(1)} mm
             </p>
+
         </article>
     `;
 }
@@ -333,25 +461,27 @@ function assessWeather(items) {
     );
 
     const highConcern =
-        values.some(
-            (value) =>
-                value.gust >= 30 ||
-                value.wind >= 22 ||
-                value.precipitation >= 4
+        values.some((value) =>
+            value.gust >= 30 ||
+            value.wind >= 22 ||
+            value.precipitation >= 4
         ) || severeCode;
 
-    const review = values.some(
-        (value) =>
-            value.gust >= 20 ||
-            value.wind >= 15 ||
-            value.cloud >= 85 ||
-            value.precipitation > 0
+    const review = values.some((value) =>
+        value.gust >= 20 ||
+        value.wind >= 15 ||
+        value.cloud >= 85 ||
+        value.precipitation > 0
     );
 
     const panel = $("decisionPanel");
 
     if (panel) {
-        panel.classList.remove("good", "review", "bad");
+        panel.classList.remove(
+            "good",
+            "review",
+            "bad"
+        );
     }
 
     if (highConcern) {
@@ -359,14 +489,21 @@ function assessWeather(items) {
             panel.classList.add("bad");
         }
 
-        setText("decisionTitle", "🔴 HIGH CONCERN");
+        setText(
+            "decisionTitle",
+            "🔴 HIGH CONCERN"
+        );
 
         setText(
             "decisionMessage",
             "General forecast data flags stronger wind, gusts, precipitation or significant weather. Check official aviation sources before making any decision."
         );
 
-        setText("warningsValue", "Weather flags");
+        setText(
+            "warningsValue",
+            "Weather flags"
+        );
+
         return;
     }
 
@@ -375,14 +512,21 @@ function assessWeather(items) {
             panel.classList.add("review");
         }
 
-        setText("decisionTitle", "🟠 REVIEW");
+        setText(
+            "decisionTitle",
+            "🟠 REVIEW"
+        );
 
         setText(
             "decisionMessage",
             "Some general forecast elements deserve a closer look. Confirm the full picture using official aviation weather and NOTAM sources."
         );
 
-        setText("warningsValue", "Review required");
+        setText(
+            "warningsValue",
+            "Review required"
+        );
+
         return;
     }
 
@@ -390,39 +534,30 @@ function assessWeather(items) {
         panel.classList.add("good");
     }
 
-    setText("decisionTitle", "🟢 LOWER CONCERN");
+    setText(
+        "decisionTitle",
+        "🟢 LOWER CONCERN"
+    );
 
     setText(
         "decisionMessage",
         "No obvious concern was found in this limited general forecast snapshot. This is not a flight-release or go/no-go recommendation."
     );
 
-    setText("warningsValue", "None detected");
-}
-
-function showRouteError(missingCodes) {
-    setText("weatherBadge", "CHECK ROUTE");
-    setClass("weatherBadge", "weather-badge error");
-    setText("statusValue", "Route Error");
-
-    if (weatherResult) {
-        weatherResult.innerHTML = `
-            <p class="error-text">
-                Unsupported aerodrome:
-                ${missingCodes.join(" and ")}.
-                Use one of the supported four-letter codes.
-            </p>
-        `;
-    }
+    setText(
+        "warningsValue",
+        "None detected"
+    );
 }
 
 async function getWeather() {
-    if (!departure || !destination) {
-        return;
-    }
+    const depCode = normaliseCode(
+        departure.value
+    );
 
-    const depCode = normaliseCode(departure.value);
-    const destCode = normaliseCode(destination.value);
+    const destCode = normaliseCode(
+        destination.value
+    );
 
     departure.value = depCode;
     destination.value = destCode;
@@ -440,23 +575,52 @@ async function getWeather() {
     }
 
     if (missing.length > 0) {
-        showRouteError(missing);
+        setText(
+            "weatherBadge",
+            "CHECK ROUTE"
+        );
+
+        setClass(
+            "weatherBadge",
+            "weather-badge error"
+        );
+
+        setText(
+            "statusValue",
+            "Route Error"
+        );
+
+        weatherResult.innerHTML = `
+            <p class="error-text">
+                Unsupported aerodrome:
+                ${missing.join(" and ")}.
+            </p>
+        `;
+
         return;
     }
 
-    if (weatherButton) {
-        weatherButton.disabled = true;
-        weatherButton.textContent = "Loading weather…";
-    }
+    weatherButton.disabled = true;
+    weatherButton.textContent =
+        "Loading weather…";
 
-    setText("weatherBadge", "LOADING");
-    setClass("weatherBadge", "weather-badge");
-    setText("statusValue", "Loading Weather");
+    setText(
+        "weatherBadge",
+        "LOADING"
+    );
 
-    if (weatherResult) {
-        weatherResult.innerHTML =
-            "<p>Contacting the forecast service…</p>";
-    }
+    setClass(
+        "weatherBadge",
+        "weather-badge"
+    );
+
+    setText(
+        "statusValue",
+        "Loading Weather"
+    );
+
+    weatherResult.innerHTML =
+        "<p>Contacting the forecast service…</p>";
 
     try {
         const items = await Promise.all([
@@ -464,19 +628,30 @@ async function getWeather() {
             fetchAirportWeather(destCode)
         ]);
 
-        if (weatherResult) {
-            weatherResult.innerHTML = `
-                <div class="weather-grid">
-                    ${items.map(renderAirportWeather).join("")}
-                </div>
-            `;
-        }
+        weatherResult.innerHTML = `
+            <div class="weather-grid">
+                ${items
+                    .map(renderAirportWeather)
+                    .join("")}
+            </div>
+        `;
 
         assessWeather(items);
 
-        setText("weatherBadge", "LIVE");
-        setClass("weatherBadge", "weather-badge live");
-        setText("statusValue", "Forecast Loaded");
+        setText(
+            "weatherBadge",
+            "LIVE"
+        );
+
+        setClass(
+            "weatherBadge",
+            "weather-badge live"
+        );
+
+        setText(
+            "statusValue",
+            "Forecast Loaded"
+        );
 
         setText(
             "updatedValue",
@@ -488,25 +663,36 @@ async function getWeather() {
     } catch (error) {
         console.error(error);
 
-        setText("weatherBadge", "ERROR");
-        setClass("weatherBadge", "weather-badge error");
-        setText("statusValue", "Weather Error");
-        setText("warningsValue", "Service unavailable");
+        setText(
+            "weatherBadge",
+            "ERROR"
+        );
 
-        if (weatherResult) {
-            weatherResult.innerHTML = `
-                <p class="error-text">
-                    Unable to retrieve weather right now.
-                    Check your internet connection and try again.
-                </p>
-            `;
-        }
+        setClass(
+            "weatherBadge",
+            "weather-badge error"
+        );
+
+        setText(
+            "statusValue",
+            "Weather Error"
+        );
+
+        setText(
+            "warningsValue",
+            "Service unavailable"
+        );
+
+        weatherResult.innerHTML = `
+            <p class="error-text">
+                Unable to retrieve weather right now.
+                Check your internet connection and try again.
+            </p>
+        `;
     } finally {
-        if (weatherButton) {
-            weatherButton.disabled = false;
-            weatherButton.textContent =
-                "🌦 Get Weather Briefing";
-        }
+        weatherButton.disabled = false;
+        weatherButton.textContent =
+            "🌦 Get Weather Briefing";
     }
 }
 
@@ -515,57 +701,56 @@ function initialiseApp() {
     destination = $("destination");
     altitude = $("altitude");
     departureTime = $("departureTime");
+    cruiseSpeed = $("cruiseSpeed");
     weatherButton = $("weatherButton");
     weatherResult = $("weatherResult");
 
     const reverseButton = $("reverseButton");
     const saveButton = $("saveButton");
 
-    if (
-        !departure ||
-        !destination ||
-        !altitude ||
-        !departureTime
-    ) {
-        console.error(
-            "TAKEOFF could not start because one or more flight input fields are missing."
-        );
+    weatherButton.addEventListener(
+        "click",
+        getWeather
+    );
 
-        return;
-    }
+    reverseButton.addEventListener(
+        "click",
+        reverseRoute
+    );
 
-    if (weatherButton) {
-        weatherButton.addEventListener("click", getWeather);
-    }
+    saveButton.addEventListener(
+        "click",
+        () => saveFlight(true)
+    );
 
-    if (reverseButton) {
-        reverseButton.addEventListener(
-            "click",
-            reverseRoute
-        );
-    }
-
-    if (saveButton) {
-        saveButton.addEventListener("click", () => {
-            saveFlight(true);
+    document
+        .querySelectorAll("input")
+        .forEach((input) => {
+            input.addEventListener(
+                "input",
+                () => saveFlight()
+            );
         });
-    }
 
-    document.querySelectorAll("input").forEach((input) => {
-        input.addEventListener("input", () => {
+    departure.addEventListener(
+        "blur",
+        () => {
+            departure.value =
+                normaliseCode(departure.value);
+
             saveFlight();
-        });
-    });
+        }
+    );
 
-    departure.addEventListener("blur", () => {
-        departure.value = normaliseCode(departure.value);
-        saveFlight();
-    });
+    destination.addEventListener(
+        "blur",
+        () => {
+            destination.value =
+                normaliseCode(destination.value);
 
-    destination.addEventListener("blur", () => {
-        destination.value = normaliseCode(destination.value);
-        saveFlight();
-    });
+            saveFlight();
+        }
+    );
 
     loadFlight();
 }
