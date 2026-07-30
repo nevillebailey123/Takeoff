@@ -1,130 +1,120 @@
-* {
-    margin: 0;
-    padding: 0;
-    box-sizing: border-box;
-}
+<!DOCTYPE html>
+<html lang="en">
 
-body {
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
-    background: #071525;
-    color: #ffffff;
-    padding: 20px;
-}
+<head>
+    <meta charset="UTF-8">
 
-.app-shell {
-    max-width: 700px;
-    margin: auto;
-}
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 
-.topbar {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 24px;
-}
+    <meta name="theme-color" content="#071525">
 
-.eyebrow {
-    font-size: 12px;
-    color: #8fa8c8;
-    letter-spacing: 2px;
-}
+    <title>Takeoff</title>
 
-h1 {
-    font-size: 36px;
-    color: white;
-}
+    <link rel="stylesheet" href="style.css">
+</head>
 
-.app-badge {
-    background: #12304d;
-    padding: 12px 18px;
-    border-radius: 12px;
-    text-align: center;
-}
+<body>
 
-.app-badge span {
-    display: block;
-    color: #9fc6ff;
-    font-size: 12px;
-}
+<div class="app-shell">
 
-.app-badge strong {
-    font-size: 18px;
-}
+    <header class="topbar">
 
-.panel {
-    background: #10243a;
-    border-radius: 18px;
-    padding: 20px;
-    margin-bottom: 20px;
-}
+        <div>
+            <div class="eyebrow">FLIGHT PLANNING</div>
+            <h1>TAKEOFF</h1>
+        </div>
 
-.panel h2 {
-    margin-bottom: 18px;
-}
+        <div class="app-badge">
+            <span>VFR</span>
+            <strong>Weather</strong>
+        </div>
 
-.field {
-    margin-bottom: 16px;
-}
+    </header>
 
-.field label {
-    display: block;
-    margin-bottom: 6px;
-    color: #9fb7d4;
-}
+    <main>
 
-input {
-    width: 100%;
-    padding: 12px;
-    border-radius: 10px;
-    border: none;
-    background: #1a3553;
-    color: white;
-    font-size: 16px;
-}
+        <section class="panel">
 
-button {
-    width: 100%;
-    margin-top: 12px;
-    padding: 14px;
-    border: none;
-    border-radius: 12px;
-    font-size: 16px;
-    font-weight: bold;
-    cursor: pointer;
-}
+            <h2>Flight Details</h2>
 
-.primary {
-    background: #1d7df2;
-    color: white;
-}
+            <div class="field">
+                <label for="departure">Departure</label>
+                <input
+                    id="departure"
+                    type="text"
+                    maxlength="4"
+                    placeholder="NZCH"
+                    autocomplete="off"
+                    autocapitalize="characters">
+            </div>
 
-.secondary {
-    background: #29507a;
-    color: white;
-}
+            <div class="field">
+                <label for="destination">Destination</label>
+                <input
+                    id="destination"
+                    type="text"
+                    maxlength="4"
+                    placeholder="NZQN"
+                    autocomplete="off"
+                    autocapitalize="characters">
+            </div>
 
-#weatherResult {
-    margin-top: 20px;
-    padding: 15px;
-    background: #18314d;
-    border-radius: 12px;
-    line-height: 1.6;
-}
+            <div class="field">
+                <label for="altitude">Cruise Altitude</label>
+                <input
+                    id="altitude"
+                    type="text"
+                    placeholder="6500 ft">
+            </div>
 
-.review-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 10px;
-}
+            <div class="field">
+                <label for="departureTime">Departure Time</label>
+                <input
+                    id="departureTime"
+                    type="time">
+            </div>
 
-.review-item {
-    background: #18314d;
-    padding: 12px;
-    border-radius: 10px;
-}
+            <button class="secondary" onclick="reverseRoute()">
+                🔄 Reverse Route
+            </button>
 
-.review-item strong {
-    display: block;
-    color: #8fbfff;
-    margin-bottom: 4px;
-}
+            <button class="primary" onclick="getWeather()">
+                🌦 Get Weather
+            </button>
+
+            <button class="secondary" onclick="reviewFlight()">
+                📋 Review Flight
+            </button>
+
+        </section>
+
+        <section class="panel">
+
+            <h2>Weather Briefing</h2>
+
+            <div id="weatherResult">
+                Enter a departure and destination then tap
+                <strong>Get Weather</strong>.
+            </div>
+
+        </section>
+
+        <section class="panel">
+
+            <h2>Flight Review</h2>
+
+            <div id="reviewResult">
+                No flight loaded.
+            </div>
+
+        </section>
+
+    </main>
+
+</div>
+
+<script src="app.js"></script>
+
+</body>
+</html>
