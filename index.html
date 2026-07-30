@@ -1,164 +1,17 @@
-<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-  <meta name="theme-color" content="#07111f">
-  <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="apple-mobile-web-app-title" content="Takeoff">
-  <title>Takeoff</title>
-  <link rel="manifest" href="manifest.json">
-  <link rel="apple-touch-icon" href="icons/icon-192.png">
-  <link rel="stylesheet" href="style.css">
-</head>
-<body>
-  <main class="app-shell">
-    <header class="topbar">
-      <div>
-        <p class="eyebrow">NZ ROUTE WEATHER</p>
-        <h1>TAKEOFF</h1>
-      </div>
-      <div class="aircraft-badge">
-        <span>Aircraft</span>
-        <strong>ZK-NSB</strong>
-      </div>
-    </header>
+<h2>Flight</h2>
 
-    <section class="panel route-panel">
-      <div class="section-heading">
-        <div>
-          <p class="eyebrow">PLAN</p>
-          <h2>New flight</h2>
-        </div>
-        <button id="swapButton" class="icon-button" aria-label="Swap departure and destination">⇄</button>
-      </div>
+<label>Departure</label><br>
+<input id="departure" placeholder="NZAS"><br><br>
 
-      <label>
-        Departure
-        <input id="departure" list="airfields" placeholder="NZAS or Ashburton" autocomplete="off">
-      </label>
+<label>Destination</label><br>
+<input id="destination" placeholder="NZHT"><br><br>
 
-      <label>
-        Destination
-        <input id="destination" list="airfields" placeholder="NZHT or Haast" autocomplete="off">
-      </label>
+<label>Cruise Altitude</label><br>
+<input id="altitude" placeholder="7500 ft"><br><br>
 
-      <datalist id="airfields">
-        <option value="NZAS - Ashburton">
-        <option value="NZCH - Christchurch">
-        <option value="NZHK - Hokitika">
-        <option value="NZHT - Haast">
-        <option value="NZMC - Mount Cook">
-        <option value="NZMO - Te Anau / Manapouri">
-        <option value="NZQN - Queenstown">
-        <option value="NZWF - Wānaka">
-        <option value="Makarora">
-        <option value="Gorge River">
-        <option value="Omarama">
-        <option value="Kurow">
-      </datalist>
+<label>Departure Time</label><br>
+<input id="departureTime" type="time"><br><br>
 
-      <div class="two-column">
-        <label>
-          Departure time
-          <input id="departureTime" type="datetime-local">
-        </label>
-
-        <label>
-          Cruise altitude
-          <select id="altitude">
-            <option value="3500">3,500 ft</option>
-            <option value="5500">5,500 ft</option>
-            <option value="6500">6,500 ft</option>
-            <option value="7500" selected>7,500 ft</option>
-            <option value="8500">8,500 ft</option>
-            <option value="9500">9,500 ft</option>
-          </select>
-        </label>
-      </div>
-
-      <button id="checkRouteButton" class="primary-button">CHECK ROUTE WEATHER</button>
-
-      <div class="secondary-actions">
-        <button id="returnTripButton" class="secondary-button">RETURN TRIP</button>
-        <button id="saveFavouriteButton" class="secondary-button">SAVE FAVOURITE</button>
-      </div>
-    </section>
-
-    <section id="briefingPanel" class="panel briefing-panel hidden" aria-live="polite">
-      <div class="status-row">
-        <div>
-          <p class="eyebrow">ROUTE BRIEFING</p>
-          <h2 id="routeTitle">Ashburton → Haast</h2>
-        </div>
-        <div class="status-chip review">DEMO</div>
-      </div>
-
-      <div class="decision-card">
-        <span class="decision-label">STATUS</span>
-        <strong>REVIEW</strong>
-        <p>This first version stores your route and presents the briefing layout. Live weather comes next.</p>
-      </div>
-
-      <div class="weather-gates">
-        <article>
-          <span class="gate-dot amber"></span>
-          <div>
-            <strong>Departure</strong>
-            <p>Live data not connected</p>
-          </div>
-        </article>
-        <article>
-          <span class="gate-dot amber"></span>
-          <div>
-            <strong>Route / Crossing</strong>
-            <p>Live data not connected</p>
-          </div>
-        </article>
-        <article>
-          <span class="gate-dot amber"></span>
-          <div>
-            <strong>Destination</strong>
-            <p>Live data not connected</p>
-          </div>
-        </article>
-      </div>
-
-      <div class="route-summary">
-        <div>
-          <span>Departure</span>
-          <strong id="summaryDeparture">—</strong>
-        </div>
-        <div>
-          <span>Destination</span>
-          <strong id="summaryDestination">—</strong>
-        </div>
-        <div>
-          <span>Altitude</span>
-          <strong id="summaryAltitude">—</strong>
-        </div>
-      </div>
-    </section>
-
-    <section class="panel saved-panel">
-      <div class="section-heading">
-        <div>
-          <p class="eyebrow">QUICK ACCESS</p>
-          <h2>Favourite routes</h2>
-        </div>
-      </div>
-      <div id="favouritesList" class="saved-list">
-        <p class="empty-state">No favourites saved yet.</p>
-      </div>
-    </section>
-
-    <footer>
-      <span>Takeoff v0.1</span>
-      <span>Weather support only. Pilot remains responsible for all decisions.</span>
-    </footer>
-  </main>
-
-  <script src="app.js"></script>
-</body>
-</html>
+<button onclick="reverseRoute()">
+🔄 Reverse Route
+</button>
