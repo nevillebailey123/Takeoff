@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
 
@@ -10,14 +11,15 @@
 
     <meta name="theme-color" content="#071525">
 
-    <title>Takeoff</title>
+    <title>TAKEOFF</title>
 
     <link
         rel="stylesheet"
         href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+        crossorigin=""
     >
 
-    <link rel="stylesheet" href="style.css?v=30">
+    <link rel="stylesheet" href="style.css?v=40">
 </head>
 
 <body>
@@ -27,7 +29,10 @@
     <header class="topbar">
 
         <div>
-            <div class="eyebrow">VFR FLIGHT PLANNING</div>
+            <div class="eyebrow">
+                NEW ZEALAND VFR PLANNING
+            </div>
+
             <h1>TAKEOFF</h1>
         </div>
 
@@ -43,20 +48,44 @@
 
         <section class="panel">
 
-            <h2>Flight Details</h2>
+            <div class="section-heading">
+
+                <div>
+                    <div class="panel-eyebrow">
+                        PLAN
+                    </div>
+
+                    <h2>Flight Details</h2>
+                </div>
+
+                <span
+                    id="airportDatabaseStatus"
+                    class="database-badge"
+                >
+                    Loading aerodromes
+                </span>
+
+            </div>
+
 
             <div class="field">
-                <label for="departure">Departure</label>
+
+                <label for="departure">
+                    Departure
+                </label>
 
                 <input
                     id="departure"
                     type="text"
-                    placeholder="NZAS"
-                    maxlength="4"
+                    list="aerodromeList"
+                    placeholder="NZAS or Ashburton"
                     autocomplete="off"
                     autocapitalize="characters"
+                    spellcheck="false"
                 >
+
             </div>
+
 
             <button
                 id="reverseButton"
@@ -66,55 +95,83 @@
                 ⇅ Reverse Route
             </button>
 
+
             <div class="field">
-                <label for="destination">Destination</label>
+
+                <label for="destination">
+                    Destination
+                </label>
 
                 <input
                     id="destination"
                     type="text"
-                    placeholder="NZHT"
-                    maxlength="4"
+                    list="aerodromeList"
+                    placeholder="NZHT or Haast"
                     autocomplete="off"
                     autocapitalize="characters"
+                    spellcheck="false"
                 >
+
             </div>
+
+
+            <datalist id="aerodromeList"></datalist>
+
 
             <div class="two-column">
 
                 <div class="field">
+
                     <label for="altitude">
                         Cruise Altitude
                     </label>
 
-                    <input
-                        id="altitude"
-                        type="number"
-                        placeholder="7500"
-                        min="0"
-                        max="25000"
-                        inputmode="numeric"
-                    >
+                    <div class="input-unit">
+
+                        <input
+                            id="altitude"
+                            type="number"
+                            placeholder="7500"
+                            min="0"
+                            max="30000"
+                            inputmode="numeric"
+                        >
+
+                        <span>ft</span>
+
+                    </div>
+
                 </div>
 
+
                 <div class="field">
+
                     <label for="cruiseSpeed">
                         Cruise Speed
                     </label>
 
-                    <input
-                        id="cruiseSpeed"
-                        type="number"
-                        value="110"
-                        min="30"
-                        max="300"
-                        placeholder="110"
-                        inputmode="numeric"
-                    >
+                    <div class="input-unit">
+
+                        <input
+                            id="cruiseSpeed"
+                            type="number"
+                            value="110"
+                            min="30"
+                            max="350"
+                            inputmode="numeric"
+                        >
+
+                        <span>kt</span>
+
+                    </div>
+
                 </div>
 
             </div>
 
+
             <div class="field">
+
                 <label for="departureTime">
                     Departure Time
                 </label>
@@ -123,7 +180,9 @@
                     id="departureTime"
                     type="time"
                 >
+
             </div>
+
 
             <button
                 id="saveButton"
@@ -132,6 +191,7 @@
             >
                 Save Flight
             </button>
+
 
             <button
                 id="weatherButton"
@@ -150,12 +210,12 @@
                 <span>Status</span>
 
                 <strong id="statusValue">
-                    Awaiting Weather
+                    Loading
                 </strong>
             </div>
 
             <div>
-                <span>Route Risk</span>
+                <span>Route Concern</span>
 
                 <strong id="warningsValue">
                     Not assessed
@@ -200,7 +260,7 @@
             </div>
 
             <p id="decisionMessage">
-                Enter a departure and destination, then request a
+                Select a departure and destination, then request a
                 route weather briefing.
             </p>
 
@@ -214,7 +274,27 @@
 
         <section class="panel">
 
+            <div class="panel-eyebrow">
+                NAVIGATION
+            </div>
+
             <h2>Route Information</h2>
+
+            <div class="summary-row">
+                <span>Departure</span>
+
+                <strong id="resolvedDeparture">
+                    Not selected
+                </strong>
+            </div>
+
+            <div class="summary-row">
+                <span>Destination</span>
+
+                <strong id="resolvedDestination">
+                    Not selected
+                </strong>
+            </div>
 
             <div class="summary-row">
                 <span>Distance</span>
@@ -311,11 +391,33 @@
 
             </div>
 
+            <div class="cloud-thresholds">
+
+                <div class="threshold-good">
+                    <span>🟢</span>
+                    <strong>3,000 ft+</strong>
+                    <small>Estimated base AGL</small>
+                </div>
+
+                <div class="threshold-review">
+                    <span>🟠</span>
+                    <strong>1,000–2,999 ft</strong>
+                    <small>Review carefully</small>
+                </div>
+
+                <div class="threshold-high">
+                    <span>🔴</span>
+                    <strong>Below 1,000 ft</strong>
+                    <small>High concern</small>
+                </div>
+
+            </div>
+
             <div id="routeWeatherResult">
 
                 <p class="muted-text">
-                    Request a weather briefing to analyse conditions
-                    along the route.
+                    Request a briefing to sample conditions along
+                    the direct route.
                 </p>
 
             </div>
@@ -324,6 +426,10 @@
 
 
         <section class="panel">
+
+            <div class="panel-eyebrow">
+                ENDPOINTS
+            </div>
 
             <h2>Aerodrome Weather</h2>
 
@@ -339,6 +445,10 @@
 
 
         <section class="panel">
+
+            <div class="panel-eyebrow">
+                SAVED DETAILS
+            </div>
 
             <h2>Flight Summary</h2>
 
@@ -390,11 +500,14 @@
             <strong>Important</strong>
 
             <p>
-                TAKEOFF displays general model forecast information.
-                It is not an official aviation weather briefing and
-                must not be used as the sole basis for a flight decision.
-                Always check official aviation weather, NOTAMs, airspace
-                and operational information.
+                TAKEOFF displays general model forecast information
+                and an approximate cloud-base calculation. It is not
+                an official aviation weather briefing. Estimated cloud
+                base is not an observed ceiling and can be inaccurate
+                in layered cloud, precipitation, fronts, terrain and
+                rapidly changing conditions. Always check official
+                aviation weather, NOTAMs, airspace, terrain and
+                operational information.
             </p>
 
         </section>
@@ -404,9 +517,13 @@
 </div>
 
 
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script
+    src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+    crossorigin=""
+></script>
 
-<script src="app.js?v=30"></script>
+<script src="app.js?v=40"></script>
 
 </body>
+
 </html>
