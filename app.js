@@ -73,12 +73,6 @@ const clearFlightButton =
 const briefMeButton =
     document.getElementById("briefMeButton");
 
-const editFlightButton =
-    document.getElementById("editFlightButton");
-
-const refreshBriefingButton =
-    document.getElementById("refreshBriefingButton");
-
 
 /* ==========================================================
    APPLICATION STATE
@@ -94,8 +88,6 @@ let isBriefingInProgress = false;
 ========================================================== */
 
 function startApplication() {
-
-    initialiseMap();
 
     loadSavedFlightIntoForm();
 
@@ -113,30 +105,29 @@ function startApplication() {
 
 function attachEventListeners() {
 
-    reverseRouteButton.addEventListener(
-        "click",
-        reverseRoute
-    );
+    if (reverseRouteButton) {
 
-    clearFlightButton.addEventListener(
-        "click",
-        clearFlight
-    );
+        reverseRouteButton.addEventListener(
+            "click",
+            reverseRoute
+        );
+    }
 
-    briefMeButton.addEventListener(
-        "click",
-        createBriefing
-    );
+    if (clearFlightButton) {
 
-    editFlightButton.addEventListener(
-        "click",
-        editFlight
-    );
+        clearFlightButton.addEventListener(
+            "click",
+            clearFlight
+        );
+    }
 
-    refreshBriefingButton.addEventListener(
-        "click",
-        refreshBriefing
-    );
+    if (briefMeButton) {
+
+        briefMeButton.addEventListener(
+            "click",
+            createBriefing
+        );
+    }
 
     const inputs = [
 
@@ -147,7 +138,7 @@ function attachEventListeners() {
         departureTimeInput,
         cruiseSpeedInput
 
-    ];
+    ].filter(Boolean);
 
     inputs.forEach((input) => {
 
@@ -160,13 +151,47 @@ function attachEventListeners() {
             "input",
             clearFormMessage
         );
-
     });
+
+    document.addEventListener(
+        "click",
+        handleDocumentClick
+    );
 
     document.addEventListener(
         "keydown",
         handleKeyboardShortcut
     );
+}
+
+
+/* ==========================================================
+   DYNAMIC BUTTONS
+========================================================== */
+
+function handleDocumentClick(event) {
+
+    const editButton =
+        event.target.closest(
+            "#editFlightButton"
+        );
+
+    if (editButton) {
+
+        editFlight();
+
+        return;
+    }
+
+    const refreshButton =
+        event.target.closest(
+            "#refreshBriefingButton"
+        );
+
+    if (refreshButton) {
+
+        refreshBriefing();
+    }
 }
 
 
@@ -183,7 +208,8 @@ async function createBriefing() {
 
     clearFormMessage();
 
-    const flight = readFlightFromForm();
+    const flight =
+        readFlightFromForm();
 
     const validationMessage =
         validateFlight(flight);
@@ -200,7 +226,10 @@ async function createBriefing() {
 
     isBriefingInProgress = true;
 
-    briefMeButton.disabled = true;
+    if (briefMeButton) {
+
+        briefMeButton.disabled = true;
+    }
 
     try {
 
@@ -227,7 +256,8 @@ async function createBriefing() {
         const routePlan =
             buildRoutePlan({
 
-                points: resolvedPoints,
+                points:
+                    resolvedPoints,
 
                 departureTime:
                     flight.departureTime,
@@ -259,12 +289,18 @@ async function createBriefing() {
         };
 
         renderBriefing(
-    currentBriefing
-);
+            currentBriefing
+        );
 
-attachBriefingButtonListeners();
+        showBriefingScreen();
 
-showBriefingScreen();
+        /*
+            The map element is created by renderBriefing(),
+            so initialise the map only after rendering.
+        */
+
+        initialiseMap();
+
         renderRouteMap(
             currentBriefing
         );
@@ -296,7 +332,10 @@ showBriefingScreen();
 
         isBriefingInProgress = false;
 
-        briefMeButton.disabled = false;
+        if (briefMeButton) {
+
+            briefMeButton.disabled = false;
+        }
     }
 }
 
@@ -306,13 +345,6 @@ showBriefingScreen();
 ========================================================== */
 
 async function refreshBriefing() {
-
-    if (!currentBriefing) {
-
-        await createBriefing();
-
-        return;
-    }
 
     await createBriefing();
 }
@@ -332,6 +364,11 @@ function editFlight() {
         behavior: "smooth"
 
     });
+
+    if (departureInput) {
+
+        departureInput.focus();
+    }
 }
 
 
@@ -343,10 +380,10 @@ function reverseRoute() {
 
     const route = [
 
-        departureInput.value,
-        viaOneInput.value,
-        viaTwoInput.value,
-        destinationInput.value
+        departureInput?.value || "",
+        viaOneInput?.value || "",
+        viaTwoInput?.value || "",
+        destinationInput?.value || ""
 
     ];
 
@@ -385,7 +422,8 @@ function clearFlight() {
 
     destinationInput.value = "";
 
-    cruiseSpeedInput.value = "110";
+    cruiseSpeedInput.value =
+        "110";
 
     departureTimeInput.value =
         getDefaultDepartureTime();
@@ -410,30 +448,30 @@ function readFlightFromForm() {
 
         departure:
             normaliseText(
-                departureInput.value
+                departureInput?.value
             ),
 
         viaOne:
             normaliseText(
-                viaOneInput.value
+                viaOneInput?.value
             ),
 
         viaTwo:
             normaliseText(
-                viaTwoInput.value
+                viaTwoInput?.value
             ),
 
         destination:
             normaliseText(
-                destinationInput.value
+                destinationInput?.value
             ),
 
         departureTime:
-            departureTimeInput.value,
+            departureTimeInput?.value || "",
 
         cruiseSpeed:
             Number(
-                cruiseSpeedInput.value
+                cruiseSpeedInput?.value
             )
 
     };
@@ -563,18 +601,18 @@ function getDefaultDepartureTime() {
     const now =
         new Date();
 
-    const minutesToAdd =
-        (
-            15 -
-            (
-                now.getMinutes() %
-                15
-            )
-        ) % 15;
+    const remainder =
+        now.getMinutes() % 15;
 
-    now.setMinutes(
-        now.getMinutes() +
-        minutesToAdd,
+    if (remainder !== 0) {
+
+        now.setMinutes(
+            now.getMinutes() +
+            (15 - remainder)
+        );
+    }
+
+    now.setSeconds(
         0,
         0
     );
@@ -583,6 +621,8 @@ function getDefaultDepartureTime() {
         now
     );
 }
+
+
 function formatDateTimeLocal(date) {
 
     const year =
@@ -683,7 +723,7 @@ function getFriendlyErrorMessage(error) {
     }
 
     if (
-        message.includes(
+        message.toLowerCase().includes(
             "weather"
         )
     ) {
@@ -695,7 +735,7 @@ function getFriendlyErrorMessage(error) {
     }
 
     if (
-        message.includes(
+        message.toLowerCase().includes(
             "forecast range"
         )
     ) {
@@ -710,48 +750,6 @@ function getFriendlyErrorMessage(error) {
         "The briefing could not be created. " +
         "Please check the route and try again."
     );
-function attachBriefingButtonListeners() {
-
-    const newEditFlightButton =
-
-        document.getElementById(
-
-            "editFlightButton"
-
-        );
-
-    const newRefreshBriefingButton =
-
-        document.getElementById(
-
-            "refreshBriefingButton"
-
-        );
-
-    if (newEditFlightButton) {
-
-        newEditFlightButton.addEventListener(
-
-            "click",
-
-            editFlight
-
-        );
-
-    }
-
-    if (newRefreshBriefingButton) {
-
-        newRefreshBriefingButton.addEventListener(
-
-            "click",
-
-            refreshBriefing
-
-        );
-
-    }
-
 }
 
 
