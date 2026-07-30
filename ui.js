@@ -39,11 +39,13 @@ export function showEntryScreen() {
     if (entryPanel) {
 
         entryPanel.hidden = false;
+        entryPanel.classList.remove("hidden");
     }
 
     if (briefingPanel) {
 
         briefingPanel.hidden = true;
+        briefingPanel.classList.add("hidden");
     }
 }
 
@@ -53,11 +55,13 @@ export function showBriefingScreen() {
     if (entryPanel) {
 
         entryPanel.hidden = true;
+        entryPanel.classList.add("hidden");
     }
 
     if (briefingPanel) {
 
         briefingPanel.hidden = false;
+        briefingPanel.classList.remove("hidden");
     }
 }
 
@@ -78,6 +82,7 @@ export function showLoading(message) {
     if (loadingOverlay) {
 
         loadingOverlay.hidden = false;
+        loadingOverlay.classList.remove("hidden");
 
         loadingOverlay.setAttribute(
             "aria-hidden",
@@ -90,6 +95,24 @@ export function showLoading(message) {
     );
 }
 
+
+export function hideLoading() {
+
+    if (loadingOverlay) {
+
+        loadingOverlay.hidden = true;
+        loadingOverlay.classList.add("hidden");
+
+        loadingOverlay.setAttribute(
+            "aria-hidden",
+            "true"
+        );
+    }
+
+    document.body.classList.remove(
+        "is-loading"
+    );
+}
 
 export function hideLoading() {
 
