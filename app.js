@@ -1,5 +1,5 @@
 // TAKEOFF v1.1
-
+alert("Takeoff JS loaded");
 const departure = document.getElementById("departure");
 const destination = document.getElementById("destination");
 const altitude = document.getElementById("altitude");
