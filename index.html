@@ -16,10 +16,9 @@
     <link
         rel="stylesheet"
         href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-        crossorigin=""
     >
 
-    <link rel="stylesheet" href="style.css?v=40">
+    <link rel="stylesheet" href="style.css?v=41">
 </head>
 
 <body>
@@ -51,10 +50,7 @@
             <div class="section-heading">
 
                 <div>
-                    <div class="panel-eyebrow">
-                        PLAN
-                    </div>
-
+                    <div class="panel-eyebrow">PLAN</div>
                     <h2>Flight Details</h2>
                 </div>
 
@@ -208,26 +204,17 @@
 
             <div>
                 <span>Status</span>
-
-                <strong id="statusValue">
-                    Loading
-                </strong>
+                <strong id="statusValue">Loading</strong>
             </div>
 
             <div>
                 <span>Route Concern</span>
-
-                <strong id="warningsValue">
-                    Not assessed
-                </strong>
+                <strong id="warningsValue">Not assessed</strong>
             </div>
 
             <div>
                 <span>Updated</span>
-
-                <strong id="updatedValue">
-                    Not yet
-                </strong>
+                <strong id="updatedValue">Not yet</strong>
             </div>
 
         </section>
@@ -260,8 +247,7 @@
             </div>
 
             <p id="decisionMessage">
-                Select a departure and destination, then request a
-                route weather briefing.
+                Select a departure and destination, then request a route weather briefing.
             </p>
 
             <div
@@ -282,50 +268,32 @@
 
             <div class="summary-row">
                 <span>Departure</span>
-
-                <strong id="resolvedDeparture">
-                    Not selected
-                </strong>
+                <strong id="resolvedDeparture">Not selected</strong>
             </div>
 
             <div class="summary-row">
                 <span>Destination</span>
-
-                <strong id="resolvedDestination">
-                    Not selected
-                </strong>
+                <strong id="resolvedDestination">Not selected</strong>
             </div>
 
             <div class="summary-row">
                 <span>Distance</span>
-
-                <strong id="distanceValue">
-                    Not calculated
-                </strong>
+                <strong id="distanceValue">Not calculated</strong>
             </div>
 
             <div class="summary-row">
                 <span>Initial Track</span>
-
-                <strong id="bearingValue">
-                    Not calculated
-                </strong>
+                <strong id="bearingValue">Not calculated</strong>
             </div>
 
             <div class="summary-row">
                 <span>Estimated Time</span>
-
-                <strong id="flightTimeValue">
-                    Not calculated
-                </strong>
+                <strong id="flightTimeValue">Not calculated</strong>
             </div>
 
             <div class="summary-row">
                 <span>Weather Samples</span>
-
-                <strong id="sampleCountValue">
-                    Not calculated
-                </strong>
+                <strong id="sampleCountValue">Not calculated</strong>
             </div>
 
         </section>
@@ -351,21 +319,26 @@
 
             <div id="routeMap"></div>
 
+            <div class="map-help">
+                Map marker numbers show cloud base in hundreds of feet AGL.
+                For example, 18 means 1,800 ft.
+            </div>
+
             <div class="map-legend">
 
                 <span>
                     <i class="legend-dot low"></i>
-                    Lower concern
+                    3,000 ft+
                 </span>
 
                 <span>
                     <i class="legend-dot review"></i>
-                    Review
+                    1,000–2,999 ft
                 </span>
 
                 <span>
                     <i class="legend-dot high"></i>
-                    High concern
+                    Below 1,000 ft
                 </span>
 
             </div>
@@ -391,33 +364,10 @@
 
             </div>
 
-            <div class="cloud-thresholds">
-
-                <div class="threshold-good">
-                    <span>🟢</span>
-                    <strong>3,000 ft+</strong>
-                    <small>Estimated base AGL</small>
-                </div>
-
-                <div class="threshold-review">
-                    <span>🟠</span>
-                    <strong>1,000–2,999 ft</strong>
-                    <small>Review carefully</small>
-                </div>
-
-                <div class="threshold-high">
-                    <span>🔴</span>
-                    <strong>Below 1,000 ft</strong>
-                    <small>High concern</small>
-                </div>
-
-            </div>
-
             <div id="routeWeatherResult">
 
                 <p class="muted-text">
-                    Request a briefing to sample conditions along
-                    the direct route.
+                    Request a briefing to sample weather along the direct route.
                 </p>
 
             </div>
@@ -454,42 +404,27 @@
 
             <div class="summary-row">
                 <span>Departure</span>
-
-                <strong id="departureSummary">
-                    Not entered
-                </strong>
+                <strong id="departureSummary">Not entered</strong>
             </div>
 
             <div class="summary-row">
                 <span>Destination</span>
-
-                <strong id="destinationSummary">
-                    Not entered
-                </strong>
+                <strong id="destinationSummary">Not entered</strong>
             </div>
 
             <div class="summary-row">
                 <span>Altitude</span>
-
-                <strong id="altitudeSummary">
-                    Not entered
-                </strong>
+                <strong id="altitudeSummary">Not entered</strong>
             </div>
 
             <div class="summary-row">
                 <span>Cruise Speed</span>
-
-                <strong id="speedSummary">
-                    Not entered
-                </strong>
+                <strong id="speedSummary">Not entered</strong>
             </div>
 
             <div class="summary-row">
                 <span>Departure Time</span>
-
-                <strong id="timeSummary">
-                    Not entered
-                </strong>
+                <strong id="timeSummary">Not entered</strong>
             </div>
 
         </section>
@@ -500,14 +435,10 @@
             <strong>Important</strong>
 
             <p>
-                TAKEOFF displays general model forecast information
-                and an approximate cloud-base calculation. It is not
-                an official aviation weather briefing. Estimated cloud
-                base is not an observed ceiling and can be inaccurate
-                in layered cloud, precipitation, fronts, terrain and
-                rapidly changing conditions. Always check official
-                aviation weather, NOTAMs, airspace, terrain and
-                operational information.
+                Cloud base is estimated from temperature and dew point.
+                It is not an observed aviation ceiling. TAKEOFF is not an
+                official aviation briefing. Always check official aviation
+                weather, NOTAMs, terrain, airspace and operational information.
             </p>
 
         </section>
@@ -517,12 +448,8 @@
 </div>
 
 
-<script
-    src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
-    crossorigin=""
-></script>
-
-<script src="app.js?v=40"></script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="app.js?v=41"></script>
 
 </body>
 
