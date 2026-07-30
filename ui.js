@@ -15,7 +15,7 @@
 ========================================================== */
 
 const entryPanel =
-    document.getElementById("entryPanel");
+    document.getElementById("flightEntryPanel");
 
 const briefingPanel =
     document.getElementById("briefingPanel");
