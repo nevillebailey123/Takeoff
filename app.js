@@ -716,6 +716,48 @@ function getFriendlyErrorMessage(error) {
         "The briefing could not be created. " +
         "Please check the route and try again."
     );
+function attachBriefingButtonListeners() {
+
+    const newEditFlightButton =
+
+        document.getElementById(
+
+            "editFlightButton"
+
+        );
+
+    const newRefreshBriefingButton =
+
+        document.getElementById(
+
+            "refreshBriefingButton"
+
+        );
+
+    if (newEditFlightButton) {
+
+        newEditFlightButton.addEventListener(
+
+            "click",
+
+            editFlight
+
+        );
+
+    }
+
+    if (newRefreshBriefingButton) {
+
+        newRefreshBriefingButton.addEventListener(
+
+            "click",
+
+            refreshBriefing
+
+        );
+
+    }
+
 }
 
 
