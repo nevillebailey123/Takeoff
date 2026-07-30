@@ -2,6 +2,7 @@
 <html lang="en">
 
 <head>
+
     <meta charset="UTF-8">
 
     <meta
@@ -18,7 +19,8 @@
         href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
     >
 
-    <link rel="stylesheet" href="style.css?v=41">
+    <link rel="stylesheet" href="style.css">
+
 </head>
 
 <body>
@@ -29,7 +31,7 @@
 
         <div>
             <div class="eyebrow">
-                NEW ZEALAND VFR PLANNING
+                NEW ZEALAND VFR WEATHER
             </div>
 
             <h1>TAKEOFF</h1>
@@ -45,148 +47,152 @@
 
     <main>
 
+        <!-- ===================== -->
+        <!-- ROUTE ENTRY           -->
+        <!-- ===================== -->
+
         <section class="panel">
 
             <div class="section-heading">
 
                 <div>
-                    <div class="panel-eyebrow">PLAN</div>
-                    <h2>Flight Details</h2>
+                    <div class="eyebrow">
+                        PLAN
+                    </div>
+
+                    <h2>Your Route</h2>
                 </div>
 
                 <span
-                    id="airportDatabaseStatus"
-                    class="database-badge"
+                    id="saveStatus"
+                    class="status-pill"
                 >
-                    Loading aerodromes
+                    Ready
                 </span>
 
             </div>
 
 
-            <div class="field">
+            <div class="route-row">
 
-                <label for="departure">
-                    Departure
+                <label class="field">
+
+                    <span>Departure</span>
+
+                    <input
+                        id="departure"
+                        list="locationList"
+                        placeholder="NZAS or Ashburton"
+                        autocomplete="off"
+                    >
+
                 </label>
 
-                <input
-                    id="departure"
-                    type="text"
-                    list="aerodromeList"
-                    placeholder="NZAS or Ashburton"
-                    autocomplete="off"
-                    autocapitalize="characters"
-                    spellcheck="false"
+
+                <button
+                    id="reverseButton"
+                    class="reverse-button"
+                    type="button"
+                    aria-label="Reverse Route"
                 >
+                    ⇄
+                </button>
+
+
+                <label class="field">
+
+                    <span>Destination</span>
+
+                    <input
+                        id="destination"
+                        list="locationList"
+                        placeholder="NZQN or Queenstown"
+                        autocomplete="off"
+                    >
+
+                </label>
 
             </div>
 
 
-            <button
-                id="reverseButton"
-                class="secondary-button"
-                type="button"
-            >
-                ⇅ Reverse Route
-            </button>
+            <div class="waypoint-grid">
 
+                <label class="field">
 
-            <div class="field">
+                    <span>
+                        Via
+                        <small>optional</small>
+                    </span>
 
-                <label for="destination">
-                    Destination
+                    <input
+                        id="waypoint1"
+                        list="locationList"
+                        placeholder="Airport, town or airstrip"
+                        autocomplete="off"
+                    >
+
                 </label>
 
-                <input
-                    id="destination"
-                    type="text"
-                    list="aerodromeList"
-                    placeholder="NZHT or Haast"
-                    autocomplete="off"
-                    autocapitalize="characters"
-                    spellcheck="false"
-                >
+
+                <label class="field">
+
+                    <span>
+                        Via
+                        <small>optional</small>
+                    </span>
+
+                    <input
+                        id="waypoint2"
+                        list="locationList"
+                        placeholder="Airport, town or airstrip"
+                        autocomplete="off"
+                    >
+
+                </label>
 
             </div>
 
 
-            <datalist id="aerodromeList"></datalist>
+            <div class="timing-grid">
+
+                <label class="field">
+
+                    <span>
+                        Departure Time
+                        <small>(NZ Time)</small>
+                    </span>
+
+                    <input
+                        id="departureTime"
+                        type="datetime-local"
+                    >
+
+                </label>
 
 
-            <div class="two-column">
+                <label class="field">
 
-                <div class="field">
-
-                    <label for="altitude">
-                        Cruise Altitude
-                    </label>
-
-                    <div class="input-unit">
-
-                        <input
-                            id="altitude"
-                            type="number"
-                            placeholder="7500"
-                            min="0"
-                            max="30000"
-                            inputmode="numeric"
-                        >
-
-                        <span>ft</span>
-
-                    </div>
-
-                </div>
-
-
-                <div class="field">
-
-                    <label for="cruiseSpeed">
+                    <span>
                         Cruise Speed
-                    </label>
+                        <small>(for ETA)</small>
+                    </span>
 
-                    <div class="input-unit">
+                    <input
+                        id="cruiseSpeed"
+                        type="number"
+                        value="110"
+                        min="30"
+                        max="350"
+                        step="1"
+                        placeholder="110"
+                    >
 
-                        <input
-                            id="cruiseSpeed"
-                            type="number"
-                            value="110"
-                            min="30"
-                            max="350"
-                            inputmode="numeric"
-                        >
-
-                        <span>kt</span>
-
-                    </div>
-
-                </div>
-
-            </div>
-
-
-            <div class="field">
-
-                <label for="departureTime">
-                    Departure Time
                 </label>
 
-                <input
-                    id="departureTime"
-                    type="time"
-                >
-
             </div>
 
 
-            <button
-                id="saveButton"
-                class="secondary-button"
-                type="button"
-            >
-                Save Flight
-            </button>
+            <datalist id="locationList"></datalist>
 
 
             <button
@@ -194,47 +200,37 @@
                 class="primary-button"
                 type="button"
             >
-                🌦 Get Route Weather Briefing
+                🌦 Get Weather Briefing
             </button>
 
-        </section>
 
-
-        <section class="status-strip">
-
-            <div>
-                <span>Status</span>
-                <strong id="statusValue">Loading</strong>
-            </div>
-
-            <div>
-                <span>Route Concern</span>
-                <strong id="warningsValue">Not assessed</strong>
-            </div>
-
-            <div>
-                <span>Updated</span>
-                <strong id="updatedValue">Not yet</strong>
-            </div>
+            <p class="help-text">
+                Cruise speed is used only to calculate your ETA so the app
+                can retrieve the forecast expected when you arrive at each
+                point along the route.
+            </p>
 
         </section>
 
 
-        <section
-            id="decisionPanel"
-            class="panel decision-panel"
-        >
+        <!-- ===================== -->
+        <!-- MAP                   -->
+        <!-- ===================== -->
+
+        <section class="panel map-panel">
 
             <div class="section-heading">
 
                 <div>
-                    <div class="panel-eyebrow">
-                        ROUTE ASSESSMENT
+
+                    <div class="eyebrow">
+                        ROUTE
                     </div>
 
-                    <h2 id="decisionTitle">
-                        Flight Review
+                    <h2 id="mapRouteLabel">
+                        No Route Selected
                     </h2>
+
                 </div>
 
                 <span
@@ -246,120 +242,166 @@
 
             </div>
 
+
+            <div id="routeMap"></div>
+
+
+            <div class="map-legend">
+
+                <span>
+                    <i class="legend-dot good"></i>
+                    Cloud Base ≥ 3000 ft
+                </span>
+
+                <span>
+                    <i class="legend-dot review"></i>
+                    1000–2999 ft
+                </span>
+
+                <span>
+                    <i class="legend-dot high"></i>
+                    Below 1000 ft
+                </span>
+
+            </div>
+
+        </section>
+
+
+        <!-- ===================== -->
+        <!-- ROUTE SUMMARY         -->
+        <!-- ===================== -->
+
+        <section class="panel">
+
+            <div class="section-heading">
+
+                <div>
+
+                    <div class="eyebrow">
+                        SUMMARY
+                    </div>
+
+                    <h2>Route Overview</h2>
+
+                </div>
+
+                <span
+                    id="routeStatus"
+                    class="status-pill"
+                >
+                    Ready
+                </span>
+
+            </div>
+
+
+            <div class="summary-grid">
+
+                <div class="summary-item">
+                    <span>Route</span>
+                    <strong id="routeSummary">
+                        Not Entered
+                    </strong>
+                </div>
+
+                <div class="summary-item">
+                    <span>Total Distance</span>
+                    <strong id="distanceValue">
+                        —
+                    </strong>
+                </div>
+
+                <div class="summary-item">
+                    <span>Estimated Flight Time</span>
+                    <strong id="flightTimeValue">
+                        —
+                    </strong>
+                </div>
+
+                <div class="summary-item">
+                    <span>Legs</span>
+                    <strong id="legsValue">
+                        —
+                    </strong>
+                </div>
+
+                <div class="summary-item">
+                    <span>Weather Samples</span>
+                    <strong id="sampleCountValue">
+                        —
+                    </strong>
+                </div>
+
+                <div class="summary-item">
+                    <span>Updated</span>
+                    <strong id="updatedValue">
+                        —
+                    </strong>
+                </div>
+
+            </div>
+
+
+            <div id="legSummary"></div>
+
+        </section>
+
+
+        <!-- ===================== -->
+        <!-- OVERALL ASSESSMENT    -->
+        <!-- ===================== -->
+
+        <section
+            id="decisionPanel"
+            class="panel decision-panel"
+        >
+
+            <div class="eyebrow">
+                ASSESSMENT
+            </div>
+
+            <h2 id="decisionTitle">
+                Flight Review
+            </h2>
+
             <p id="decisionMessage">
-                Select a departure and destination, then request a route weather briefing.
+                Enter your route then request a weather briefing.
             </p>
 
             <div
                 id="riskDetails"
-                class="risk-details hidden"
+                class="risk-grid hidden"
             ></div>
 
         </section>
 
 
-        <section class="panel">
-
-            <div class="panel-eyebrow">
-                NAVIGATION
-            </div>
-
-            <h2>Route Information</h2>
-
-            <div class="summary-row">
-                <span>Departure</span>
-                <strong id="resolvedDeparture">Not selected</strong>
-            </div>
-
-            <div class="summary-row">
-                <span>Destination</span>
-                <strong id="resolvedDestination">Not selected</strong>
-            </div>
-
-            <div class="summary-row">
-                <span>Distance</span>
-                <strong id="distanceValue">Not calculated</strong>
-            </div>
-
-            <div class="summary-row">
-                <span>Initial Track</span>
-                <strong id="bearingValue">Not calculated</strong>
-            </div>
-
-            <div class="summary-row">
-                <span>Estimated Time</span>
-                <strong id="flightTimeValue">Not calculated</strong>
-            </div>
-
-            <div class="summary-row">
-                <span>Weather Samples</span>
-                <strong id="sampleCountValue">Not calculated</strong>
-            </div>
-
-        </section>
-
+        <!-- ===================== -->
+        <!-- ROUTE WEATHER         -->
+        <!-- ===================== -->
 
         <section class="panel">
 
             <div class="section-heading">
 
                 <div>
-                    <div class="panel-eyebrow">
-                        TRACK DISPLAY
+
+                    <div class="eyebrow">
+                        ROUTE WEATHER
                     </div>
 
-                    <h2>Route Map</h2>
+                    <h2>
+                        Conditions Along The Route
+                    </h2>
+
                 </div>
 
-                <span id="mapRouteLabel">
-                    No route
-                </span>
-
-            </div>
-
-            <div id="routeMap"></div>
-
-            <div class="map-help">
-                Map marker numbers show cloud base in hundreds of feet AGL.
-                For example, 18 means 1,800 ft.
-            </div>
-
-            <div class="map-legend">
-
-                <span>
-                    <i class="legend-dot low"></i>
-                    3,000 ft+
-                </span>
-
-                <span>
-                    <i class="legend-dot review"></i>
-                    1,000–2,999 ft
-                </span>
-
-                <span>
-                    <i class="legend-dot high"></i>
-                    Below 1,000 ft
-                </span>
-
-            </div>
-
-        </section>
-
-
-        <section class="panel">
-
-            <div class="section-heading">
-
-                <div>
-                    <div class="panel-eyebrow">
-                        ALONG THE TRACK
-                    </div>
-
-                    <h2>Route Weather</h2>
-                </div>
-
-                <span id="routeWeatherStatus">
-                    Not loaded
+                <span
+                    id="routeWeatherStatus"
+                    class="status-pill"
+                >
+                    Not Loaded
                 </span>
 
             </div>
@@ -367,7 +409,9 @@
             <div id="routeWeatherResult">
 
                 <p class="muted-text">
-                    Request a briefing to sample weather along the direct route.
+                    Press
+                    <strong>Get Weather Briefing</strong>
+                    to analyse the route.
                 </p>
 
             </div>
@@ -375,18 +419,32 @@
         </section>
 
 
+        <!-- ===================== -->
+        <!-- ENDPOINT WEATHER      -->
+        <!-- ===================== -->
+
         <section class="panel">
 
-            <div class="panel-eyebrow">
-                ENDPOINTS
-            </div>
+            <div class="section-heading">
 
-            <h2>Aerodrome Weather</h2>
+                <div>
+
+                    <div class="eyebrow">
+                        ENDPOINTS
+                    </div>
+
+                    <h2>
+                        Departure & Destination
+                    </h2>
+
+                </div>
+
+            </div>
 
             <div id="weatherResult">
 
                 <p class="muted-text">
-                    No weather has been requested yet.
+                    No weather requested yet.
                 </p>
 
             </div>
@@ -394,62 +452,29 @@
         </section>
 
 
-        <section class="panel">
+        <footer>
 
-            <div class="panel-eyebrow">
-                SAVED DETAILS
-            </div>
+            General forecast information only.
 
-            <h2>Flight Summary</h2>
+            <br><br>
 
-            <div class="summary-row">
-                <span>Departure</span>
-                <strong id="departureSummary">Not entered</strong>
-            </div>
+            This is not an official aviation weather briefing.
 
-            <div class="summary-row">
-                <span>Destination</span>
-                <strong id="destinationSummary">Not entered</strong>
-            </div>
+            Always consult current METARs, TAFs, NOTAMs,
+            airspace information and official forecasts before flight.
 
-            <div class="summary-row">
-                <span>Altitude</span>
-                <strong id="altitudeSummary">Not entered</strong>
-            </div>
-
-            <div class="summary-row">
-                <span>Cruise Speed</span>
-                <strong id="speedSummary">Not entered</strong>
-            </div>
-
-            <div class="summary-row">
-                <span>Departure Time</span>
-                <strong id="timeSummary">Not entered</strong>
-            </div>
-
-        </section>
-
-
-        <section class="disclaimer">
-
-            <strong>Important</strong>
-
-            <p>
-                Cloud base is estimated from temperature and dew point.
-                It is not an observed aviation ceiling. TAKEOFF is not an
-                official aviation briefing. Always check official aviation
-                weather, NOTAMs, terrain, airspace and operational information.
-            </p>
-
-        </section>
+        </footer>
 
     </main>
 
 </div>
 
 
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script src="app.js?v=41"></script>
+<script
+    src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+></script>
+
+<script src="app.js"></script>
 
 </body>
 
