@@ -388,4 +388,8 @@ button:disabled {
     #routeMap {
         height: 320px;
     }
+    .map-error {
+    padding: 30px 20px;
+    text-align: center;
+}
 }
