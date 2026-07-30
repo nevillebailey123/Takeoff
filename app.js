@@ -563,32 +563,26 @@ function getDefaultDepartureTime() {
     const now =
         new Date();
 
-    const roundedMinutes =
-        Math.ceil(
-            now.getMinutes() / 15
-        ) * 15;
+    const minutesToAdd =
+        (
+            15 -
+            (
+                now.getMinutes() %
+                15
+            )
+        ) % 15;
 
     now.setMinutes(
-        roundedMinutes,
+        now.getMinutes() +
+        minutesToAdd,
         0,
         0
     );
-
-    if (roundedMinutes >= 60) {
-
-        now.setHours(
-            now.getHours() + 1
-        );
-
-        now.setMinutes(0);
-    }
 
     return formatDateTimeLocal(
         now
     );
 }
-
-
 function formatDateTimeLocal(date) {
 
     const year =
