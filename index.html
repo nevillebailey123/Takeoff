@@ -1,25 +1,102 @@
-<h2>Flight</h2>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Takeoff</title>
 
-<label>Departure</label><br>
-<input id="departure" placeholder="NZAS"><br><br>
+<link rel="stylesheet" href="style.css">
+</head>
 
-<label>Destination</label><br>
-<input id="destination" placeholder="NZHT"><br><br>
+<body>
 
-<label>Cruise Altitude</label><br>
-<input id="altitude" placeholder="7500 ft"><br><br>
+<div class="app-shell">
 
-<label>Departure Time</label><br>
-<input id="departureTime" type="time"><br><br>
+<div class="topbar">
+<div>
+<div class="eyebrow">FLIGHT PLANNING</div>
+<h1>TAKEOFF</h1>
+</div>
 
-<button onclick="reverseRoute()">
+<div class="aircraft-badge">
+<span>Aircraft</span>
+<strong>Bearhawk</strong>
+</div>
+</div>
+
+
+<div class="panel">
+
+<h2>Flight Details</h2>
+
+<label>
+Departure
+<input id="departure" placeholder="NZAS">
+</label>
+
+<label>
+Destination
+<input id="destination" placeholder="NZHT">
+</label>
+
+<div class="two-column">
+
+<label>
+Cruise Altitude
+<input id="altitude" placeholder="7500 ft">
+</label>
+
+<label>
+Departure Time
+<input id="departureTime" type="time">
+</label>
+
+</div>
+
+<button class="primary-button" onclick="getWeather()">
+🌦 Get Weather Briefing
+</button>
+
+<div class="secondary-actions">
+
+<button class="secondary-button" onclick="reverseRoute()">
 🔄 Reverse Route
 </button>
-<br><br>
 
-<button onclick="getWeather()">
-🌦 Get Weather
+<button class="secondary-button">
+💾 Saved Route
 </button>
 
-<div id="weatherResult" style="margin-top:20px;"></div>
+</div>
+
+</div>
+
+
+<div class="panel">
+
+<div class="section-heading">
+<h2>Weather Brief</h2>
+<div class="status-chip review">PENDING</div>
+</div>
+
+<div id="weatherResult" class="empty-state">
+
+Enter a departure and destination then tap
+<b>Get Weather Briefing</b>.
+
+</div>
+
+</div>
+
+
+<footer>
+<span>Takeoff v1.2</span>
+<span>Designed for iPad & iPhone</span>
+</footer>
+
+</div>
+
 <script src="app.js" defer></script>
+
+</body>
+</html>
