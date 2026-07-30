@@ -4,14 +4,16 @@
 <head>
     <meta charset="UTF-8">
 
-    <meta name="viewport"
-          content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0, viewport-fit=cover"
+    >
 
     <meta name="theme-color" content="#071525">
 
     <title>Takeoff</title>
 
-    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="style.css?v=15">
 </head>
 
 <body>
@@ -40,73 +42,168 @@
 
             <div class="field">
                 <label for="departure">Departure</label>
+
                 <input
                     id="departure"
                     type="text"
                     maxlength="4"
                     placeholder="NZCH"
                     autocomplete="off"
-                    autocapitalize="characters">
+                    autocapitalize="characters"
+                >
             </div>
 
             <div class="field">
                 <label for="destination">Destination</label>
+
                 <input
                     id="destination"
                     type="text"
                     maxlength="4"
                     placeholder="NZQN"
                     autocomplete="off"
-                    autocapitalize="characters">
+                    autocapitalize="characters"
+                >
             </div>
 
             <div class="field">
                 <label for="altitude">Cruise Altitude</label>
+
                 <input
                     id="altitude"
                     type="text"
-                    placeholder="6500 ft">
+                    placeholder="6500"
+                    inputmode="numeric"
+                >
             </div>
 
             <div class="field">
                 <label for="departureTime">Departure Time</label>
+
                 <input
                     id="departureTime"
-                    type="time">
+                    type="time"
+                >
             </div>
 
-            <button class="secondary" onclick="reverseRoute()">
+            <button
+                id="reverseButton"
+                class="secondary"
+                type="button"
+            >
                 🔄 Reverse Route
             </button>
 
-            <button class="primary" onclick="getWeather()">
-                🌦 Get Weather
+            <button
+                id="weatherButton"
+                class="primary"
+                type="button"
+            >
+                🌦 Get Weather Briefing
             </button>
 
-            <button class="secondary" onclick="reviewFlight()">
-                📋 Review Flight
+            <button
+                id="saveButton"
+                class="secondary"
+                type="button"
+            >
+                💾 Save Route
             </button>
 
         </section>
 
         <section class="panel">
 
-            <h2>Weather Briefing</h2>
+            <div class="section-heading">
+                <h2>Weather Briefing</h2>
+
+                <span
+                    id="weatherBadge"
+                    class="weather-badge"
+                >
+                    NOT LOADED
+                </span>
+            </div>
 
             <div id="weatherResult">
-                Enter a departure and destination then tap
-                <strong>Get Weather</strong>.
+                <p>
+                    Enter a departure and destination, then tap
+                    <strong>Get Weather Briefing</strong>.
+                </p>
             </div>
+
+        </section>
+
+        <section
+            id="decisionPanel"
+            class="panel decision-panel"
+        >
+
+            <h2 id="decisionTitle">
+                ⚪ WEATHER NOT REVIEWED
+            </h2>
+
+            <p id="decisionMessage">
+                Load the weather to see a basic review of the general forecast.
+            </p>
 
         </section>
 
         <section class="panel">
 
-            <h2>Flight Review</h2>
+            <h2>Flight Summary</h2>
 
-            <div id="reviewResult">
-                No flight loaded.
+            <div class="summary-row">
+                <span>Departure</span>
+                <strong id="departureSummary">
+                    Not entered
+                </strong>
             </div>
+
+            <div class="summary-row">
+                <span>Destination</span>
+                <strong id="destinationSummary">
+                    Not entered
+                </strong>
+            </div>
+
+            <div class="summary-row">
+                <span>Cruise Altitude</span>
+                <strong id="altitudeSummary">
+                    Not entered
+                </strong>
+            </div>
+
+            <div class="summary-row">
+                <span>Status</span>
+                <strong id="statusValue">
+                    Awaiting Weather
+                </strong>
+            </div>
+
+            <div class="summary-row">
+                <span>Warnings</span>
+                <strong id="warningsValue">
+                    Not assessed
+                </strong>
+            </div>
+
+            <div class="summary-row">
+                <span>Updated</span>
+                <strong id="updatedValue">
+                    Not yet
+                </strong>
+            </div>
+
+        </section>
+
+        <section class="panel disclaimer">
+
+            <p>
+                This app uses general public forecast information only.
+                It is not an official aviation weather briefing and must
+                not be used as the sole basis for a flight decision.
+            </p>
 
         </section>
 
@@ -114,6 +211,7 @@
 
 </div>
 
-<script src="app.js"></script>
+<script src="app.js?v=15"></script>
+
 </body>
 </html>
