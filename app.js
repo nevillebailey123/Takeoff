@@ -259,11 +259,12 @@ async function createBriefing() {
         };
 
         renderBriefing(
-            currentBriefing
-        );
+    currentBriefing
+);
 
-        showBriefingScreen();
+attachBriefingButtonListeners();
 
+showBriefingScreen();
         renderRouteMap(
             currentBriefing
         );
