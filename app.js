@@ -275,24 +275,35 @@ function createRouteIcon() {
 
 
 function initialiseMap() {
-    const mapElement = $("routeMap");
+    const mapElement = document.getElementById("routeMap");
 
-    if (!mapElement || typeof L === "undefined") {
-        console.warn("Route map could not be started.");
+    if (!mapElement) {
+        console.error("routeMap element is missing.");
         return;
     }
 
-    routeMap = L.map("routeMap", {
-        zoomControl: true
-    }).setView(
+    if (typeof L === "undefined") {
+        console.error("Leaflet did not load.");
+
+        mapElement.innerHTML = `
+            <p class="error-text map-error">
+                The map library did not load.
+                Refresh the page and try again.
+            </p>
+        `;
+
+        return;
+    }
+
+    routeMap = L.map(mapElement).setView(
         [-42.2, 172.5],
         5
     );
 
     L.tileLayer(
-        "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+        "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
         {
-            maxZoom: 18,
+            maxZoom: 19,
             attribution:
                 "&copy; OpenStreetMap contributors"
         }
@@ -300,7 +311,8 @@ function initialiseMap() {
 
     window.setTimeout(() => {
         routeMap.invalidateSize();
-    }, 200);
+        updateRouteMap();
+    }, 300);
 }
 
 
