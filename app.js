@@ -65,3 +65,8 @@ async function getWeather() {
         👀 Visibility 20 km
     `;
 }
+document.getElementById("weatherButton").addEventListener("click", getWeather);
+
+document.getElementById("reverseButton").addEventListener("click", reverseRoute);
+
+document.getElementById("saveButton").addEventListener("click", saveFlight);
