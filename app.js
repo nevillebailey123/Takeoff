@@ -1,34 +1,143 @@
 "use strict";
 
 // TAKEOFF v1.6
-// General forecast information only.
+// General weather information only.
 // Not an official aviation weather briefing.
 
 const $ = (id) => document.getElementById(id);
 
 const aerodromes = {
-    NZAA: { name: "Auckland", lat: -37.0082, lon: 174.7850 },
-    NZAR: { name: "Ardmore", lat: -37.0297, lon: 174.9733 },
-    NZAS: { name: "Ashburton", lat: -43.9033, lon: 171.7967 },
-    NZCH: { name: "Christchurch", lat: -43.4894, lon: 172.5322 },
-    NZDN: { name: "Dunedin", lat: -45.9281, lon: 170.1983 },
-    NZHK: { name: "Hokitika", lat: -42.7136, lon: 170.9853 },
-    NZHN: { name: "Hamilton", lat: -37.8667, lon: 175.3321 },
-    NZHT: { name: "Haast", lat: -43.8650, lon: 169.0410 },
-    NZMF: { name: "Milford Sound", lat: -44.6733, lon: 167.9233 },
-    NZMK: { name: "Motueka", lat: -41.1233, lon: 172.9886 },
-    NZNS: { name: "Nelson", lat: -41.2983, lon: 173.2211 },
-    NZNV: { name: "Invercargill", lat: -46.4124, lon: 168.3130 },
-    NZPM: { name: "Palmerston North", lat: -40.3206, lon: 175.6170 },
-    NZPP: { name: "Paraparaumu", lat: -40.9047, lon: 174.9890 },
-    NZQN: { name: "Queenstown", lat: -45.0211, lon: 168.7390 },
-    NZRO: { name: "Rotorua", lat: -38.1092, lon: 176.3172 },
-    NZTG: { name: "Tauranga", lat: -37.6719, lon: 176.1960 },
-    NZTU: { name: "Gisborne", lat: -38.6633, lon: 177.9783 },
-    NZWB: { name: "Woodbourne", lat: -41.5183, lon: 173.8700 },
-    NZWF: { name: "Wānaka", lat: -44.7222, lon: 169.2456 },
-    NZWN: { name: "Wellington", lat: -41.3272, lon: 174.8053 },
-    NZWR: { name: "Whangārei", lat: -35.7683, lon: 174.3650 }
+    NZAA: {
+        name: "Auckland",
+        lat: -37.0082,
+        lon: 174.7850
+    },
+
+    NZAR: {
+        name: "Ardmore",
+        lat: -37.0297,
+        lon: 174.9733
+    },
+
+    NZAS: {
+        name: "Ashburton",
+        lat: -43.9033,
+        lon: 171.7967
+    },
+
+    NZCH: {
+        name: "Christchurch",
+        lat: -43.4894,
+        lon: 172.5322
+    },
+
+    NZDN: {
+        name: "Dunedin",
+        lat: -45.9281,
+        lon: 170.1983
+    },
+
+    NZHK: {
+        name: "Hokitika",
+        lat: -42.7136,
+        lon: 170.9853
+    },
+
+    NZHN: {
+        name: "Hamilton",
+        lat: -37.8667,
+        lon: 175.3321
+    },
+
+    NZHT: {
+        name: "Haast",
+        lat: -43.8650,
+        lon: 169.0410
+    },
+
+    NZMF: {
+        name: "Milford Sound",
+        lat: -44.6733,
+        lon: 167.9233
+    },
+
+    NZMK: {
+        name: "Motueka",
+        lat: -41.1233,
+        lon: 172.9886
+    },
+
+    NZNS: {
+        name: "Nelson",
+        lat: -41.2983,
+        lon: 173.2211
+    },
+
+    NZNV: {
+        name: "Invercargill",
+        lat: -46.4124,
+        lon: 168.3130
+    },
+
+    NZPM: {
+        name: "Palmerston North",
+        lat: -40.3206,
+        lon: 175.6170
+    },
+
+    NZPP: {
+        name: "Paraparaumu",
+        lat: -40.9047,
+        lon: 174.9890
+    },
+
+    NZQN: {
+        name: "Queenstown",
+        lat: -45.0211,
+        lon: 168.7390
+    },
+
+    NZRO: {
+        name: "Rotorua",
+        lat: -38.1092,
+        lon: 176.3172
+    },
+
+    NZTG: {
+        name: "Tauranga",
+        lat: -37.6719,
+        lon: 176.1960
+    },
+
+    NZTU: {
+        name: "Timaru",
+        lat: -44.3028,
+        lon: 171.2253
+    },
+
+    NZWB: {
+        name: "Woodbourne",
+        lat: -41.5183,
+        lon: 173.8700
+    },
+
+    NZWF: {
+        name: "Wānaka",
+        lat: -44.7222,
+        lon: 169.2456
+    },
+
+    NZWN: {
+        name: "Wellington",
+        lat: -41.3272,
+        lon: 174.8053
+    },
+
+    NZWR: {
+        name: "Whangārei",
+        lat: -35.7683,
+        lon: 174.3650
+    }
 };
 
 let departure;
@@ -39,9 +148,18 @@ let cruiseSpeed;
 let weatherButton;
 let weatherResult;
 
+let routeMap;
+let routeLine;
+let departureMarker;
+let destinationMarker;
+
+
 function normaliseCode(value) {
-    return String(value || "").trim().toUpperCase();
+    return String(value || "")
+        .trim()
+        .toUpperCase();
 }
+
 
 function setText(id, value) {
     const element = $(id);
@@ -51,6 +169,7 @@ function setText(id, value) {
     }
 }
 
+
 function setClass(id, className) {
     const element = $(id);
 
@@ -59,21 +178,30 @@ function setClass(id, className) {
     }
 }
 
+
 function toRadians(degrees) {
     return degrees * Math.PI / 180;
 }
 
+
 function toDegrees(radians) {
     return radians * 180 / Math.PI;
 }
+
 
 function calculateDistanceNm(start, end) {
     const earthRadiusNm = 3440.065;
 
     const lat1 = toRadians(start.lat);
     const lat2 = toRadians(end.lat);
-    const deltaLat = toRadians(end.lat - start.lat);
-    const deltaLon = toRadians(end.lon - start.lon);
+
+    const deltaLat = toRadians(
+        end.lat - start.lat
+    );
+
+    const deltaLon = toRadians(
+        end.lon - start.lon
+    );
 
     const a =
         Math.sin(deltaLat / 2) ** 2 +
@@ -89,21 +217,31 @@ function calculateDistanceNm(start, end) {
     return earthRadiusNm * c;
 }
 
+
 function calculateBearing(start, end) {
     const lat1 = toRadians(start.lat);
     const lat2 = toRadians(end.lat);
-    const deltaLon = toRadians(end.lon - start.lon);
 
-    const y = Math.sin(deltaLon) * Math.cos(lat2);
+    const deltaLon = toRadians(
+        end.lon - start.lon
+    );
+
+    const y =
+        Math.sin(deltaLon) *
+        Math.cos(lat2);
 
     const x =
-        Math.cos(lat1) * Math.sin(lat2) -
+        Math.cos(lat1) *
+        Math.sin(lat2) -
         Math.sin(lat1) *
         Math.cos(lat2) *
         Math.cos(deltaLon);
 
-    return (toDegrees(Math.atan2(y, x)) + 360) % 360;
+    return (
+        toDegrees(Math.atan2(y, x)) + 360
+    ) % 360;
 }
+
 
 function formatFlightTime(hours) {
     if (!Number.isFinite(hours) || hours <= 0) {
@@ -118,32 +256,214 @@ function formatFlightTime(hours) {
         return `${minutes} min`;
     }
 
-    return `${flightHours} hr ${minutes
-        .toString()
-        .padStart(2, "0")} min`;
+    return (
+        `${flightHours} hr ` +
+        `${String(minutes).padStart(2, "0")} min`
+    );
 }
 
+
+function createRouteIcon() {
+    return L.divIcon({
+        className: "",
+        html: '<div class="route-marker"></div>',
+        iconSize: [18, 18],
+        iconAnchor: [9, 9],
+        popupAnchor: [0, -10]
+    });
+}
+
+
+function initialiseMap() {
+    const mapElement = $("routeMap");
+
+    if (!mapElement || typeof L === "undefined") {
+        console.warn("Route map could not be started.");
+        return;
+    }
+
+    routeMap = L.map("routeMap", {
+        zoomControl: true
+    }).setView(
+        [-42.2, 172.5],
+        5
+    );
+
+    L.tileLayer(
+        "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+        {
+            maxZoom: 18,
+            attribution:
+                "&copy; OpenStreetMap contributors"
+        }
+    ).addTo(routeMap);
+
+    window.setTimeout(() => {
+        routeMap.invalidateSize();
+    }, 200);
+}
+
+
+function clearRouteMap() {
+    if (!routeMap) {
+        return;
+    }
+
+    if (routeLine) {
+        routeMap.removeLayer(routeLine);
+        routeLine = null;
+    }
+
+    if (departureMarker) {
+        routeMap.removeLayer(departureMarker);
+        departureMarker = null;
+    }
+
+    if (destinationMarker) {
+        routeMap.removeLayer(destinationMarker);
+        destinationMarker = null;
+    }
+
+    setText("mapRouteLabel", "No route");
+}
+
+
+function updateRouteMap() {
+    if (!routeMap) {
+        return;
+    }
+
+    const depCode = normaliseCode(
+        departure.value
+    );
+
+    const destCode = normaliseCode(
+        destination.value
+    );
+
+    const start = aerodromes[depCode];
+    const end = aerodromes[destCode];
+
+    clearRouteMap();
+
+    if (!start || !end) {
+        routeMap.setView(
+            [-42.2, 172.5],
+            5
+        );
+
+        return;
+    }
+
+    const startPosition = [
+        start.lat,
+        start.lon
+    ];
+
+    const endPosition = [
+        end.lat,
+        end.lon
+    ];
+
+    departureMarker = L.marker(
+        startPosition,
+        {
+            icon: createRouteIcon()
+        }
+    )
+        .addTo(routeMap)
+        .bindPopup(
+            `<strong>${depCode}</strong><br>${start.name}`
+        );
+
+    destinationMarker = L.marker(
+        endPosition,
+        {
+            icon: createRouteIcon()
+        }
+    )
+        .addTo(routeMap)
+        .bindPopup(
+            `<strong>${destCode}</strong><br>${end.name}`
+        );
+
+    routeLine = L.polyline(
+        [
+            startPosition,
+            endPosition
+        ],
+        {
+            weight: 4,
+            opacity: 0.9
+        }
+    ).addTo(routeMap);
+
+    routeMap.fitBounds(
+        routeLine.getBounds(),
+        {
+            padding: [35, 35]
+        }
+    );
+
+    setText(
+        "mapRouteLabel",
+        `${depCode} → ${destCode}`
+    );
+
+    window.setTimeout(() => {
+        routeMap.invalidateSize();
+    }, 100);
+}
+
+
 function calculateRoute() {
-    const depCode = normaliseCode(departure.value);
-    const destCode = normaliseCode(destination.value);
+    const depCode = normaliseCode(
+        departure.value
+    );
+
+    const destCode = normaliseCode(
+        destination.value
+    );
 
     const start = aerodromes[depCode];
     const end = aerodromes[destCode];
 
     if (!start || !end) {
-        setText("distanceValue", "Not calculated");
-        setText("bearingValue", "Not calculated");
-        setText("flightTimeValue", "Not calculated");
+        setText(
+            "distanceValue",
+            "Not calculated"
+        );
+
+        setText(
+            "bearingValue",
+            "Not calculated"
+        );
+
+        setText(
+            "flightTimeValue",
+            "Not calculated"
+        );
+
+        updateRouteMap();
         return;
     }
 
-    const distance = calculateDistanceNm(start, end);
-    const bearing = calculateBearing(start, end);
+    const distance = calculateDistanceNm(
+        start,
+        end
+    );
+
+    const bearing = calculateBearing(
+        start,
+        end
+    );
 
     const speed = Number(cruiseSpeed.value);
-    const flightTime = speed > 0
-        ? distance / speed
-        : null;
+
+    const flightTime =
+        speed > 0
+            ? distance / speed
+            : null;
 
     setText(
         "distanceValue",
@@ -152,8 +472,7 @@ function calculateRoute() {
 
     setText(
         "bearingValue",
-        `${Math.round(bearing)
-            .toString()
+        `${String(Math.round(bearing))
             .padStart(3, "0")}° true`
     );
 
@@ -163,17 +482,22 @@ function calculateRoute() {
             ? formatFlightTime(flightTime)
             : "Enter cruise speed"
     );
+
+    updateRouteMap();
 }
+
 
 function updateSummary() {
     setText(
         "departureSummary",
-        normaliseCode(departure.value) || "Not entered"
+        normaliseCode(departure.value) ||
+        "Not entered"
     );
 
     setText(
         "destinationSummary",
-        normaliseCode(destination.value) || "Not entered"
+        normaliseCode(destination.value) ||
+        "Not entered"
     );
 
     setText(
@@ -193,10 +517,17 @@ function updateSummary() {
     calculateRoute();
 }
 
+
 function saveFlight(showConfirmation = false) {
     const flight = {
-        departure: normaliseCode(departure.value),
-        destination: normaliseCode(destination.value),
+        departure: normaliseCode(
+            departure.value
+        ),
+
+        destination: normaliseCode(
+            destination.value
+        ),
+
         altitude: altitude.value,
         departureTime: departureTime.value,
         cruiseSpeed: cruiseSpeed.value
@@ -208,13 +539,19 @@ function saveFlight(showConfirmation = false) {
             JSON.stringify(flight)
         );
     } catch (error) {
-        console.warn("Could not save flight", error);
+        console.warn(
+            "Could not save flight",
+            error
+        );
     }
 
     updateSummary();
 
     if (showConfirmation) {
-        setText("statusValue", "Route Saved");
+        setText(
+            "statusValue",
+            "Route Saved"
+        );
 
         window.setTimeout(() => {
             const status = $("statusValue");
@@ -223,49 +560,75 @@ function saveFlight(showConfirmation = false) {
                 status &&
                 status.textContent === "Route Saved"
             ) {
-                status.textContent = "Awaiting Weather";
+                status.textContent =
+                    "Awaiting Weather";
             }
         }, 1600);
     }
 }
 
+
 function loadFlight() {
     try {
-        const saved = localStorage.getItem("lastFlight");
+        const saved =
+            localStorage.getItem("lastFlight");
 
         if (!saved) {
+            cruiseSpeed.value = "110";
             updateSummary();
             return;
         }
 
         const flight = JSON.parse(saved);
 
-        departure.value = flight.departure || "";
-        destination.value = flight.destination || "";
-        altitude.value = flight.altitude || "";
-        departureTime.value = flight.departureTime || "";
-        cruiseSpeed.value = flight.cruiseSpeed || "110";
+        departure.value =
+            flight.departure || "";
+
+        destination.value =
+            flight.destination || "";
+
+        altitude.value =
+            flight.altitude || "";
+
+        departureTime.value =
+            flight.departureTime || "";
+
+        cruiseSpeed.value =
+            flight.cruiseSpeed || "110";
 
         updateSummary();
+
     } catch (error) {
-        console.warn("Could not load saved flight", error);
+        console.warn(
+            "Could not load saved flight",
+            error
+        );
+
+        cruiseSpeed.value = "110";
         updateSummary();
     }
 }
 
-function reverseRoute() {
-    const oldDeparture = departure.value;
 
-    departure.value = destination.value;
-    destination.value = oldDeparture;
+function reverseRoute() {
+    const oldDeparture =
+        departure.value;
+
+    departure.value =
+        destination.value;
+
+    destination.value =
+        oldDeparture;
 
     saveFlight();
 }
+
 
 function makeWeatherUrl(airport) {
     const params = new URLSearchParams({
         latitude: airport.lat,
         longitude: airport.lon,
+
         current: [
             "temperature_2m",
             "apparent_temperature",
@@ -276,19 +639,26 @@ function makeWeatherUrl(airport) {
             "wind_direction_10m",
             "wind_gusts_10m"
         ].join(","),
+
         wind_speed_unit: "kn",
         timezone: "auto"
     });
 
-    return `https://api.open-meteo.com/v1/forecast?${params.toString()}`;
+    return (
+        "https://api.open-meteo.com/v1/forecast?" +
+        params.toString()
+    );
 }
+
 
 async function fetchAirportWeather(code) {
     const airport = aerodromes[code];
 
     const response = await fetch(
         makeWeatherUrl(airport),
-        { cache: "no-store" }
+        {
+            cache: "no-store"
+        }
     );
 
     if (!response.ok) {
@@ -300,7 +670,9 @@ async function fetchAirportWeather(code) {
     const data = await response.json();
 
     if (!data.current) {
-        throw new Error("Weather data was incomplete");
+        throw new Error(
+            "Weather data was incomplete"
+        );
     }
 
     return {
@@ -309,6 +681,7 @@ async function fetchAirportWeather(code) {
         current: data.current
     };
 }
+
 
 function compassDirection(degrees) {
     if (!Number.isFinite(degrees)) {
@@ -326,8 +699,11 @@ function compassDirection(degrees) {
         "NW"
     ];
 
-    return points[Math.round(degrees / 45) % 8];
+    return points[
+        Math.round(degrees / 45) % 8
+    ];
 }
+
 
 function weatherDescription(code) {
     const descriptions = {
@@ -354,8 +730,12 @@ function weatherDescription(code) {
         99: "Thunderstorm with hail"
     };
 
-    return descriptions[code] || "Forecast available";
+    return (
+        descriptions[code] ||
+        "Forecast available"
+    );
 }
+
 
 function safeNumber(value, fallback = 0) {
     const number = Number(value);
@@ -364,6 +744,7 @@ function safeNumber(value, fallback = 0) {
         ? number
         : fallback;
 }
+
 
 function renderAirportWeather(item) {
     const weather = item.current;
@@ -422,8 +803,7 @@ function renderAirportWeather(item) {
             <p>
                 💨
                 <strong>
-                    ${Math.round(direction)
-                        .toString()
+                    ${String(Math.round(direction))
                         .padStart(3, "0")}°
                     ${compassDirection(direction)}
                     at ${Math.round(wind)} kt
@@ -431,11 +811,11 @@ function renderAirportWeather(item) {
             </p>
 
             <p>
-                ↗️ Gusts ${Math.round(gust)} kt
+                ↗ Gusts ${Math.round(gust)} kt
             </p>
 
             <p>
-                ☁️ Cloud cover ${Math.round(cloud)}%
+                ☁ Cloud cover ${Math.round(cloud)}%
             </p>
 
             <p>
@@ -447,31 +827,53 @@ function renderAirportWeather(item) {
     `;
 }
 
-function assessWeather(items) {
-    const values = items.map(({ current }) => ({
-        wind: safeNumber(current.wind_speed_10m),
-        gust: safeNumber(current.wind_gusts_10m),
-        cloud: safeNumber(current.cloud_cover),
-        precipitation: safeNumber(current.precipitation),
-        code: safeNumber(current.weather_code)
-    }));
 
-    const severeCode = values.some((value) =>
-        [65, 75, 82, 95, 96, 99].includes(value.code)
+function assessWeather(items) {
+    const values = items.map(
+        ({ current }) => ({
+            wind: safeNumber(
+                current.wind_speed_10m
+            ),
+
+            gust: safeNumber(
+                current.wind_gusts_10m
+            ),
+
+            cloud: safeNumber(
+                current.cloud_cover
+            ),
+
+            precipitation: safeNumber(
+                current.precipitation
+            ),
+
+            code: safeNumber(
+                current.weather_code
+            )
+        })
+    );
+
+    const severeCode = values.some(
+        (value) =>
+            [65, 75, 82, 95, 96, 99]
+                .includes(value.code)
     );
 
     const highConcern =
-        values.some((value) =>
-            value.gust >= 30 ||
-            value.wind >= 22 ||
-            value.precipitation >= 4
-        ) || severeCode;
+        values.some(
+            (value) =>
+                value.gust >= 30 ||
+                value.wind >= 22 ||
+                value.precipitation >= 4
+        ) ||
+        severeCode;
 
-    const review = values.some((value) =>
-        value.gust >= 20 ||
-        value.wind >= 15 ||
-        value.cloud >= 85 ||
-        value.precipitation > 0
+    const review = values.some(
+        (value) =>
+            value.gust >= 20 ||
+            value.wind >= 15 ||
+            value.cloud >= 85 ||
+            value.precipitation > 0
     );
 
     const panel = $("decisionPanel");
@@ -485,9 +887,7 @@ function assessWeather(items) {
     }
 
     if (highConcern) {
-        if (panel) {
-            panel.classList.add("bad");
-        }
+        panel?.classList.add("bad");
 
         setText(
             "decisionTitle",
@@ -496,7 +896,7 @@ function assessWeather(items) {
 
         setText(
             "decisionMessage",
-            "General forecast data flags stronger wind, gusts, precipitation or significant weather. Check official aviation sources before making any decision."
+            "The general forecast flags stronger wind, gusts, precipitation or significant weather. Check official aviation sources before making any flight decision."
         );
 
         setText(
@@ -508,9 +908,7 @@ function assessWeather(items) {
     }
 
     if (review) {
-        if (panel) {
-            panel.classList.add("review");
-        }
+        panel?.classList.add("review");
 
         setText(
             "decisionTitle",
@@ -530,9 +928,7 @@ function assessWeather(items) {
         return;
     }
 
-    if (panel) {
-        panel.classList.add("good");
-    }
+    panel?.classList.add("good");
 
     setText(
         "decisionTitle",
@@ -549,6 +945,7 @@ function assessWeather(items) {
         "None detected"
     );
 }
+
 
 async function getWeather() {
     const depCode = normaliseCode(
@@ -567,11 +964,15 @@ async function getWeather() {
     const missing = [];
 
     if (!aerodromes[depCode]) {
-        missing.push(depCode || "departure");
+        missing.push(
+            depCode || "departure"
+        );
     }
 
     if (!aerodromes[destCode]) {
-        missing.push(destCode || "destination");
+        missing.push(
+            destCode || "destination"
+        );
     }
 
     if (missing.length > 0) {
@@ -601,6 +1002,7 @@ async function getWeather() {
     }
 
     weatherButton.disabled = true;
+
     weatherButton.textContent =
         "Loading weather…";
 
@@ -655,11 +1057,15 @@ async function getWeather() {
 
         setText(
             "updatedValue",
-            new Date().toLocaleTimeString([], {
-                hour: "2-digit",
-                minute: "2-digit"
-            })
+            new Date().toLocaleTimeString(
+                [],
+                {
+                    hour: "2-digit",
+                    minute: "2-digit"
+                }
+            )
         );
+
     } catch (error) {
         console.error(error);
 
@@ -689,12 +1095,15 @@ async function getWeather() {
                 Check your internet connection and try again.
             </p>
         `;
+
     } finally {
         weatherButton.disabled = false;
+
         weatherButton.textContent =
             "🌦 Get Weather Briefing";
     }
 }
+
 
 function initialiseApp() {
     departure = $("departure");
@@ -702,11 +1111,18 @@ function initialiseApp() {
     altitude = $("altitude");
     departureTime = $("departureTime");
     cruiseSpeed = $("cruiseSpeed");
-    weatherButton = $("weatherButton");
-    weatherResult = $("weatherResult");
 
-    const reverseButton = $("reverseButton");
-    const saveButton = $("saveButton");
+    weatherButton =
+        $("weatherButton");
+
+    weatherResult =
+        $("weatherResult");
+
+    const reverseButton =
+        $("reverseButton");
+
+    const saveButton =
+        $("saveButton");
 
     weatherButton.addEventListener(
         "click",
@@ -736,7 +1152,9 @@ function initialiseApp() {
         "blur",
         () => {
             departure.value =
-                normaliseCode(departure.value);
+                normaliseCode(
+                    departure.value
+                );
 
             saveFlight();
         }
@@ -746,14 +1164,18 @@ function initialiseApp() {
         "blur",
         () => {
             destination.value =
-                normaliseCode(destination.value);
+                normaliseCode(
+                    destination.value
+                );
 
             saveFlight();
         }
     );
 
+    initialiseMap();
     loadFlight();
 }
+
 
 document.addEventListener(
     "DOMContentLoaded",
