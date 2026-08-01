@@ -6,13 +6,7 @@ const statusColour = status => ({
   good: '#22c55e', review: '#eab308', caution: '#f97316', poor: '#ef4444', unknown: '#64748b'
 }[status] || '#64748b');
 
-const formatCloud = sample => Number.isFinite(sample.cloudBaseAmslFt)
-  ? (sample.source === 'METAR'
-      ? (sample.cloudText || '—')
-      : sample.automatic
-        ? `${sample.cloudBaseAmslFt}`
-        : `${sample.cloudBaseAmslFt} (${Number.isFinite(sample.cloudBaseAglFt) ? sample.cloudBaseAglFt : '—'})`)
-  : '—';
+const formatCloud = sample => sample.cloudDisplay || '—';
 
 const formatVisibility = sample => sample.source === 'METAR'
   ? (sample.visibilityText || '—')
@@ -36,7 +30,7 @@ const popupContent = sample => `<div>
   Dew Point: ${Number.isFinite(sample.metarDewPointC) ? `${sample.metarDewPointC} C` : '—'}<br>
   QNH: ${Number.isFinite(sample.metarQnhHpa) ? `${sample.metarQnhHpa} HPA` : '—'}<br>
   Obs Time: ${sample.metarObsTime || '—'}<br>` : ''}
-  Source: ${sample.source || 'Forecast'}
+  ${sample.sourceLabel || sample.source || 'Forecast'}
 </div>`;
 
 function ensureMap() {

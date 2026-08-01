@@ -60,11 +60,14 @@
             <select id="daySelect"></select>
           </label>
 
-          <label class="field compact-field time-field">
+          <label class="field compact-field time-field" id="departureTimeField">
             <span>TIME</span>
             <div class="time-control">
-              <input id="departureTime" type="time" value="09:30">
-              <button id="periodToggle" class="period-toggle" type="button">AM</button>
+              <button id="departureTimeButton" class="time-button" type="button" aria-haspopup="dialog" aria-controls="timePickerOverlay">
+                <span id="departureTimeValue">09:30</span>
+                <span class="time-button-icon" aria-hidden="true">▾</span>
+              </button>
+              <input id="departureTime" type="hidden" value="09:30">
             </div>
           </label>
 
@@ -99,6 +102,21 @@
     <div class="loading-card">
       <div class="spinner"></div>
       <p id="loadingMessage">BUILDING ROUTE WEATHER BRIEFING…</p>
+    </div>
+  </div>
+
+  <div id="timePickerOverlay" class="time-picker-overlay" hidden>
+    <div class="time-picker-sheet" role="dialog" aria-modal="true" aria-labelledby="timePickerTitle">
+      <div class="time-picker-header">
+        <strong id="timePickerTitle">SELECT DEPARTURE TIME</strong>
+        <div class="time-picker-actions">
+          <button id="timePickerCancel" class="time-picker-action time-picker-cancel" type="button">CANCEL</button>
+          <button id="timePickerDone" class="time-picker-action time-picker-done" type="button">DONE</button>
+        </div>
+      </div>
+      <div class="time-picker-wheel-frame">
+        <div id="timePickerWheel" class="time-picker-wheel" aria-label="Departure time options"></div>
+      </div>
     </div>
   </div>
 
