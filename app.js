@@ -106,7 +106,7 @@ async function getBriefing() {
       `${forecastDate.toLocaleDateString('en-NZ',{weekday:'long',day:'numeric',month:'short'}).toUpperCase()} • ${forecastDate.toLocaleTimeString('en-NZ',{hour:'2-digit',minute:'2-digit'})} NZT`);
     renderLimitingBanner($('limitingBanner'), samples, selectReference);
     renderWeatherCards(weatherCards, samples, selectReference);
-    renderRouteMap(samples, selectReference);
+    renderRouteMap(userRoute, samples, selectReference);
     saveCurrent();
     briefingPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
   } catch (error) {

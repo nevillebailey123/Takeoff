@@ -51,7 +51,12 @@ export function buildRouteReferences(userPoints, targetSpacingNm = 50) {
       const mathematicalPoint = interpolate(start, end, i / intervals);
       const named = nearestNamedLocation(mathematicalPoint, usedNames, 40);
       if (named) {
-        pushUnique({ ...named, automatic: true });
+        pushUnique({
+          ...named,
+          lat: mathematicalPoint.lat,
+          lon: mathematicalPoint.lon,
+          automatic: true
+        });
       } else {
         pushUnique({
           code: `ENR${index + 1}-${i}`,
