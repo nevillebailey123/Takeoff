@@ -6,7 +6,7 @@ function nearestIndex(times, targetIso) {
   let bestDelta = Infinity;
   times.forEach((time, index) => {
     const delta = Math.abs(new Date(time).getTime() - target);
-    if (delta < bestDelta) { best = index; bestDelta = delta; }
+    if (git statusdelta < bestDelta) { best = index; bestDelta = delta; }
   });
   return best;
 }
