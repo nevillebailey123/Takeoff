@@ -43,18 +43,34 @@ export function renderLimitingBanner(container, samples, onSelect) {
 
 export function renderWeatherCards(container, samples, onSelect) {
   container.innerHTML = samples.map((sample, index) => {
-    const cloud = Number.isFinite(sample.cloudBaseAmslFt)
-      ? `${sample.cloudBaseAmslFt}${Number.isFinite(sample.cloudBaseAglFt) && Number.isFinite(sample.elevationFt) ? ` (${sample.cloudBaseAglFt})` : ''}`
-      : '—';
-    const visibility = Number.isFinite(sample.visibilityKm) ? (sample.visibilityKm >= 20 ? '>20 KM' : `${Math.round(sample.visibilityKm)} KM`) : '—';
-    const wind = `${String(sample.windDirection).padStart(3,'0')}/${sample.windKt}${sample.gustKt > sample.windKt ? ` G${sample.gustKt}` : ''}`;
+    const cloud = sample.source === 'METAR'
+      ? (sample.cloudText || '—')
+      : Number.isFinite(sample.cloudBaseAmslFt)
+        ? (sample.automatic
+            ? `${sample.cloudBaseAmslFt}`
+            : `${sample.cloudBaseAmslFt} (${Number.isFinite(sample.cloudBaseAglFt) ? sample.cloudBaseAglFt : '—'})`)
+        : '—';
+    const visibility = sample.source === 'METAR'
+      ? (sample.visibilityText || '—')
+      : Number.isFinite(sample.visibilityKm) ? (sample.visibilityKm >= 20 ? '>20 KM' : `${Math.round(sample.visibilityKm)} KM`) : '—';
+    const wind = sample.source === 'METAR' && sample.windText
+      ? sample.windText
+      : `${String(sample.windDirection).padStart(3,'0')}/${sample.windKt}${sample.gustKt > sample.windKt ? ` G${sample.gustKt}` : ''}`;
     const rain = sample.precipitationMm > .2 ? `${sample.precipitationMm.toFixed(1)} MM` : 'NIL';
+    const source = sample.source || 'Forecast';
+    const metarRows = sample.source === 'METAR' ? `
+      <div class="weather-row"><span>🌡</span><strong>${Number.isFinite(sample.metarTempC) ? `${sample.metarTempC} C` : '—'}</strong></div>
+      <div class="weather-row"><span>💧</span><strong>${Number.isFinite(sample.metarDewPointC) ? `${sample.metarDewPointC} C` : '—'}</strong></div>
+      <div class="weather-row"><span>⚖</span><strong>${Number.isFinite(sample.metarQnhHpa) ? `${sample.metarQnhHpa} HPA` : '—'}</strong></div>
+      <div class="weather-row"><span>🕒</span><strong>${sample.metarObsTime || '—'}</strong></div>` : '';
     return `<button type="button" class="weather-card card-${sample.status}" data-index="${index}">
       <h3>${sample.name.toUpperCase()}</h3>
       <div class="weather-row"><span>☁</span><strong>${cloud}</strong></div>
       <div class="weather-row"><span>👁</span><strong>${visibility}</strong></div>
       <div class="weather-row"><span>💨</span><strong>${wind}</strong></div>
       <div class="weather-row"><span>🌧</span><strong>${rain}</strong></div>
+      ${metarRows}
+      <div class="weather-row"><span>ⓘ</span><strong>Source: ${source}</strong></div>
     </button>`;
   }).join('');
   container.querySelectorAll('.weather-card').forEach(card => card.addEventListener('click', () => onSelect(Number(card.dataset.index))));

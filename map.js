@@ -7,14 +7,22 @@ const statusColour = status => ({
 }[status] || '#64748b');
 
 const formatCloud = sample => Number.isFinite(sample.cloudBaseAmslFt)
-  ? `${sample.cloudBaseAmslFt}${Number.isFinite(sample.cloudBaseAglFt) && Number.isFinite(sample.elevationFt) ? ` (${sample.cloudBaseAglFt})` : ''}`
+  ? (sample.source === 'METAR'
+      ? (sample.cloudText || '—')
+      : sample.automatic
+        ? `${sample.cloudBaseAmslFt}`
+        : `${sample.cloudBaseAmslFt} (${Number.isFinite(sample.cloudBaseAglFt) ? sample.cloudBaseAglFt : '—'})`)
   : '—';
 
-const formatVisibility = sample => Number.isFinite(sample.visibilityKm)
-  ? (sample.visibilityKm >= 20 ? '>20 KM' : `${Math.round(sample.visibilityKm)} KM`)
-  : '—';
+const formatVisibility = sample => sample.source === 'METAR'
+  ? (sample.visibilityText || '—')
+  : Number.isFinite(sample.visibilityKm)
+    ? (sample.visibilityKm >= 20 ? '>20 KM' : `${Math.round(sample.visibilityKm)} KM`)
+    : '—';
 
-const formatWind = sample => `${String(sample.windDirection).padStart(3, '0')}/${sample.windKt}${sample.gustKt > sample.windKt ? ` G${sample.gustKt}` : ''}`;
+const formatWind = sample => sample.source === 'METAR' && sample.windText
+  ? sample.windText
+  : `${String(sample.windDirection).padStart(3, '0')}/${sample.windKt}${sample.gustKt > sample.windKt ? ` G${sample.gustKt}` : ''}`;
 
 const formatRain = sample => sample.precipitationMm > .2 ? `${sample.precipitationMm.toFixed(1)} MM` : 'NIL';
 
@@ -23,7 +31,12 @@ const popupContent = sample => `<div>
   Cloud base: ${formatCloud(sample)}<br>
   Visibility: ${formatVisibility(sample)}<br>
   Wind: ${formatWind(sample)}<br>
-  Rain: ${formatRain(sample)}
+  Rain: ${formatRain(sample)}<br>
+  ${sample.source === 'METAR' ? `Temp: ${Number.isFinite(sample.metarTempC) ? `${sample.metarTempC} C` : '—'}<br>
+  Dew Point: ${Number.isFinite(sample.metarDewPointC) ? `${sample.metarDewPointC} C` : '—'}<br>
+  QNH: ${Number.isFinite(sample.metarQnhHpa) ? `${sample.metarQnhHpa} HPA` : '—'}<br>
+  Obs Time: ${sample.metarObsTime || '—'}<br>` : ''}
+  Source: ${sample.source || 'Forecast'}
 </div>`;
 
 function ensureMap() {
@@ -69,7 +82,6 @@ export function renderRouteMap(routeLinePoints, weatherReferencePoints, onSelect
     marker.bindPopup(popupContent(sample));
     marker.on('click', event => {
       onSelect(index);
-      marker.openPopup();
       L.DomEvent.stopPropagation(event);
     });
     marker.bindTooltip(sample.name, { direction: 'top', offset: [0, -8] });
@@ -88,7 +100,11 @@ export function highlightMarker(index) {
     const el = marker.getElement()?.querySelector('.route-marker');
     if (!el) return;
     el.classList.toggle('active', markerIndex === index);
+    if (markerIndex !== index) marker.closePopup();
   });
   const marker = markers[index];
-  if (marker && map) map.panTo(marker.getLatLng(), { animate: true, duration: .35 });
+  if (marker && map) {
+    map.panTo(marker.getLatLng(), { animate: true, duration: .35 });
+    marker.openPopup();
+  }
 }

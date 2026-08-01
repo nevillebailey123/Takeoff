@@ -55,6 +55,7 @@ export function buildRouteReferences(userPoints, targetSpacingNm = 50) {
           ...named,
           lat: mathematicalPoint.lat,
           lon: mathematicalPoint.lon,
+          elevationFt: null,
           automatic: true
         });
       } else {
