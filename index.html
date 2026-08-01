@@ -1,691 +1,108 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-
-    <meta
-        name="viewport"
-        content="width=device-width, initial-scale=1.0, viewport-fit=cover"
-    >
-
-    <meta name="theme-color" content="#071525">
-
-    <meta
-        name="description"
-        content="TAKEOFF New Zealand VFR weather briefing app"
-    >
-
-    <title>TAKEOFF</title>
-
-    <!-- Leaflet map styling -->
-    <link
-        rel="stylesheet"
-        href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-        integrity="sha256-p4NxAoJBhIINfQ3jMZQ4W1wJkI8D0W4mE1Q7YwR8B9A="
-        crossorigin=""
-    >
-
-    <!-- TAKEOFF styling -->
-    <link rel="stylesheet" href="style.css">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#081726">
+  <title>Takeoff</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="preconnect" href="https://unpkg.com">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
+  <link rel="stylesheet" href="style.css">
 </head>
-
 <body>
-
-<div class="app-shell">
-
-    <!-- =====================================================
-         HEADER
-    ====================================================== -->
-
+  <div class="app-shell">
     <header class="topbar">
-
-        <div class="brand">
-
-            <div class="eyebrow">
-                NEW ZEALAND VFR WEATHER BRIEFING
-            </div>
-
-            <h1>TAKEOFF</h1>
-
-        </div>
-
-        <div class="app-badge">
-            <span>VFR</span>
-            <strong>Weather</strong>
-        </div>
-
+      <div>
+        <div class="eyebrow">FLIGHT PLANNING</div>
+        <h1>TAKEOFF</h1>
+      </div>
+      <div class="app-badge"><span>VFR</span><strong>WEATHER</strong></div>
     </header>
 
-
-    <!-- =====================================================
-         FLIGHT ENTRY SCREEN
-    ====================================================== -->
-
     <main>
+      <section class="panel route-panel" aria-labelledby="routeHeading">
+        <div class="panel-heading-row">
+          <div>
+            <p class="section-kicker">PLAN YOUR ROUTE</p>
+            <h2 id="routeHeading">ROUTE</h2>
+          </div>
+          <p class="required-note">DEPARTURE ONLY REQUIRED</p>
+        </div>
 
-        <section
-            id="flightEntryPanel"
-            class="panel entry-panel"
-        >
+        <div class="route-row route-primary-row">
+          <label class="field field-departure">
+            <span>DEPARTURE</span>
+            <input id="departure" list="locationList" autocomplete="off" placeholder="ASHBURTON OR NZAS">
+          </label>
 
-            <div class="panel-heading">
+          <button id="reverseButton" class="reverse-button" type="button" aria-label="Reverse complete route">⇄</button>
 
-                <div>
-                    <p class="section-kicker">Plan your route</p>
-                    <h2>Flight Details</h2>
-                </div>
+          <label class="field field-via">
+            <span>VIA 1</span>
+            <input id="waypoint1" list="locationList" autocomplete="off" placeholder="OPTIONAL">
+          </label>
 
-                <button
-                    id="clearFlightButton"
-                    class="text-button"
-                    type="button"
-                >
-                    Clear
-                </button>
+          <label class="field field-via">
+            <span>VIA 2</span>
+            <input id="waypoint2" list="locationList" autocomplete="off" placeholder="OPTIONAL">
+          </label>
 
+          <label class="field field-destination">
+            <span>DESTINATION</span>
+            <input id="destination" list="locationList" autocomplete="off" placeholder="OPTIONAL FOR LOCAL FLIGHT">
+          </label>
+        </div>
+
+        <div class="route-row route-secondary-row">
+          <label class="field compact-field day-field">
+            <span>DAY</span>
+            <select id="daySelect"></select>
+          </label>
+
+          <label class="field compact-field time-field">
+            <span>TIME</span>
+            <div class="time-control">
+              <input id="departureTime" type="time" value="09:30">
+              <button id="periodToggle" class="period-toggle" type="button">AM</button>
             </div>
-
-
-            <!-- Departure and destination -->
-
-            <div class="route-row">
-
-                <div class="field">
-
-                    <label for="departure">
-                        Departure
-                    </label>
-
-                    <input
-                        id="departure"
-                        name="departure"
-                        type="text"
-                        placeholder="Ashburton or NZAS"
-                        autocomplete="off"
-                        autocapitalize="words"
-                        spellcheck="false"
-                    >
-
-                </div>
-
-
-                <button
-                    id="reverseRouteButton"
-                    class="reverse-button"
-                    type="button"
-                    aria-label="Reverse route"
-                    title="Reverse route"
-                >
-                    ⇄
-                </button>
-
-
-                <div class="field">
-
-                    <label for="destination">
-                        Destination
-                    </label>
-
-                    <input
-                        id="destination"
-                        name="destination"
-                        type="text"
-                        placeholder="Haast or NZHT"
-                        autocomplete="off"
-                        autocapitalize="words"
-                        spellcheck="false"
-                    >
-
-                </div>
-
-            </div>
-
-
-            <!-- Via points -->
-
-            <div class="via-grid">
-
-                <div class="field">
-
-                    <label for="viaOne">
-                        Via
-                        <span class="optional-label">optional</span>
-                    </label>
-
-                    <input
-                        id="viaOne"
-                        name="viaOne"
-                        type="text"
-                        placeholder="Hokitika"
-                        autocomplete="off"
-                        autocapitalize="words"
-                        spellcheck="false"
-                    >
-
-                </div>
-
-
-                <div class="field">
-
-                    <label for="viaTwo">
-                        Via
-                        <span class="optional-label">optional</span>
-                    </label>
-
-                    <input
-                        id="viaTwo"
-                        name="viaTwo"
-                        type="text"
-                        placeholder="Makarora"
-                        autocomplete="off"
-                        autocapitalize="words"
-                        spellcheck="false"
-                    >
-
-                </div>
-
-            </div>
-
-
-            <!-- Time and speed -->
-
-            <div class="details-grid">
-
-                <div class="field">
-
-                    <label for="departureTime">
-                        Departure Time
-                        <span class="label-note">NZ time</span>
-                    </label>
-
-                    <input
-                        id="departureTime"
-                        name="departureTime"
-                        type="datetime-local"
-                    >
-
-                </div>
-
-
-                <div class="field">
-
-                    <label for="cruiseSpeed">
-                        Cruise Speed
-                        <span class="label-note">for ETA</span>
-                    </label>
-
-                    <div class="input-with-unit">
-
-                        <input
-                            id="cruiseSpeed"
-                            name="cruiseSpeed"
-                            type="number"
-                            min="30"
-                            max="400"
-                            step="1"
-                            inputmode="numeric"
-                            placeholder="110"
-                        >
-
-                        <span class="input-unit">
-                            kt
-                        </span>
-
-                    </div>
-
-                </div>
-
-            </div>
-
-
-            <!-- Validation and loading messages -->
-
-            <div
-                id="formMessage"
-                class="form-message"
-                role="status"
-                aria-live="polite"
-            ></div>
-
-
-            <!-- Main action -->
-
-            <button
-                id="briefMeButton"
-                class="primary-button"
-                type="button"
-            >
-                <span class="button-icon">✈</span>
-                <span>Brief Me</span>
-            </button>
-
-
-            <p class="briefing-disclaimer">
-                Forecast information only. Confirm conditions using official
-                aviation weather, NOTAM and operational sources before flight.
-            </p>
-
-        </section>
-
-
-        <!-- =================================================
-             BRIEFING RESULTS
-        ================================================== -->
-
-        <section
-            id="briefingPanel"
-            class="briefing-panel hidden"
-            aria-live="polite"
-        >
-
-            <!-- Briefing toolbar -->
-
-            <div class="briefing-toolbar">
-
-                <button
-                    id="editFlightButton"
-                    class="secondary-button"
-                    type="button"
-                >
-                    ← Edit Flight
-                </button>
-
-                <button
-                    id="refreshBriefingButton"
-                    class="secondary-button"
-                    type="button"
-                >
-                    Refresh
-                </button>
-
-            </div>
-
-
-            <!-- Route heading -->
-
-            <section class="panel route-summary-panel">
-
-                <p class="section-kicker">Weather briefing</p>
-
-                <h2 id="briefingRouteTitle">
-                    Route
-                </h2>
-
-                <div class="route-meta">
-
-                    <div class="meta-item">
-                        <span class="meta-label">Distance</span>
-                        <strong id="routeDistance">—</strong>
-                    </div>
-
-                    <div class="meta-item">
-                        <span class="meta-label">Flight time</span>
-                        <strong id="routeDuration">—</strong>
-                    </div>
-
-                    <div class="meta-item">
-                        <span class="meta-label">Arrival</span>
-                        <strong id="routeArrivalTime">—</strong>
-                    </div>
-
-                </div>
-
-            </section>
-
-
-            <!-- Overall assessment -->
-
-            <section
-                id="assessmentCard"
-                class="panel assessment-card assessment-review"
-            >
-
-                <div class="assessment-heading">
-
-                    <div
-                        id="assessmentIndicator"
-                        class="assessment-indicator"
-                        aria-hidden="true"
-                    ></div>
-
-                    <div>
-
-                        <p class="section-kicker">
-                            Overall assessment
-                        </p>
-
-                        <h2 id="assessmentTitle">
-                            Review
-                        </h2>
-
-                    </div>
-
-                </div>
-
-                <p id="assessmentSummary">
-                    Preparing your route weather assessment.
-                </p>
-
-            </section>
-
-
-            <!-- First concern -->
-
-            <section
-                id="firstConcernCard"
-                class="panel concern-card"
-            >
-
-                <div class="panel-heading">
-
-                    <div>
-                        <p class="section-kicker">First concern</p>
-                        <h2 id="firstConcernLocation">
-                            No concern identified
-                        </h2>
-                    </div>
-
-                    <span
-                        id="firstConcernEta"
-                        class="eta-pill"
-                    >
-                        —
-                    </span>
-
-                </div>
-
-
-                <div class="weather-stat-grid">
-
-                    <div class="weather-stat">
-                        <span>Cloud base</span>
-                        <strong id="firstConcernCloud">—</strong>
-                    </div>
-
-                    <div class="weather-stat">
-                        <span>Wind</span>
-                        <strong id="firstConcernWind">—</strong>
-                    </div>
-
-                    <div class="weather-stat">
-                        <span>Visibility</span>
-                        <strong id="firstConcernVisibility">—</strong>
-                    </div>
-
-                    <div class="weather-stat">
-                        <span>Weather</span>
-                        <strong id="firstConcernWeather">—</strong>
-                    </div>
-
-                </div>
-
-                <p
-                    id="firstConcernReason"
-                    class="concern-reason"
-                >
-                    No significant deterioration has been identified yet.
-                </p>
-
-            </section>
-
-
-            <!-- Key numbers -->
-
-            <section class="summary-grid">
-
-                <article class="panel summary-card">
-
-                    <span class="summary-label">
-                        Lowest cloud base
-                    </span>
-
-                    <strong id="lowestCloudBase">
-                        —
-                    </strong>
-
-                    <span
-                        id="lowestCloudLocation"
-                        class="summary-subtext"
-                    >
-                        —
-                    </span>
-
-                </article>
-
-
-                <article class="panel summary-card">
-
-                    <span class="summary-label">
-                        Highest wind
-                    </span>
-
-                    <strong id="highestWind">
-                        —
-                    </strong>
-
-                    <span
-                        id="highestWindLocation"
-                        class="summary-subtext"
-                    >
-                        —
-                    </span>
-
-                </article>
-
-
-                <article class="panel summary-card">
-
-                    <span class="summary-label">
-                        Lowest visibility
-                    </span>
-
-                    <strong id="lowestVisibility">
-                        —
-                    </strong>
-
-                    <span
-                        id="lowestVisibilityLocation"
-                        class="summary-subtext"
-                    >
-                        —
-                    </span>
-
-                </article>
-
-
-                <article class="panel summary-card">
-
-                    <span class="summary-label">
-                        Rain
-                    </span>
-
-                    <strong id="rainSummary">
-                        —
-                    </strong>
-
-                    <span
-                        id="rainLocation"
-                        class="summary-subtext"
-                    >
-                        —
-                    </span>
-
-                </article>
-
-            </section>
-
-
-            <!-- Map -->
-
-            <section class="panel map-panel">
-
-                <div class="panel-heading">
-
-                    <div>
-                        <p class="section-kicker">Route weather</p>
-                        <h2>Map</h2>
-                    </div>
-
-                    <div class="map-legend">
-
-                        <span class="legend-item">
-                            <span class="legend-dot legend-good"></span>
-                            3000 ft+
-                        </span>
-
-                        <span class="legend-item">
-                            <span class="legend-dot legend-review"></span>
-                            1000–2999 ft
-                        </span>
-
-                        <span class="legend-item">
-                            <span class="legend-dot legend-danger"></span>
-                            Below 1000 ft
-                        </span>
-
-                    </div>
-
-                </div>
-
-                <div
-                    id="routeMap"
-                    class="route-map"
-                    aria-label="Route weather map"
-                ></div>
-
-                <p class="map-note">
-                    Marker numbers show estimated cloud base in hundreds of feet.
-                    Tap a marker for the forecast valid at the estimated arrival time.
-                </p>
-
-            </section>
-
-
-            <!-- Weather changes -->
-
-            <section class="panel changes-panel">
-
-                <div class="panel-heading">
-
-                    <div>
-                        <p class="section-kicker">What changes</p>
-                        <h2>Route Trends</h2>
-                    </div>
-
-                </div>
-
-                <div
-                    id="routeChangesList"
-                    class="changes-list"
-                >
-                    <p class="empty-message">
-                        Weather changes will appear here.
-                    </p>
-                </div>
-
-            </section>
-
-
-            <!-- Route timeline -->
-
-            <section class="panel timeline-panel">
-
-                <div class="panel-heading">
-
-                    <div>
-                        <p class="section-kicker">Forecast at ETA</p>
-                        <h2>Route Timeline</h2>
-                    </div>
-
-                </div>
-
-                <div
-                    id="routeTimeline"
-                    class="route-timeline"
-                >
-                    <p class="empty-message">
-                        Route forecast points will appear here.
-                    </p>
-                </div>
-
-            </section>
-
-
-            <!-- Detailed briefing -->
-
-            <section class="panel details-panel">
-
-                <details>
-
-                    <summary>
-                        Detailed weather data
-                    </summary>
-
-                    <div
-                        id="detailedWeatherTable"
-                        class="weather-table-wrapper"
-                    ></div>
-
-                </details>
-
-            </section>
-
-        </section>
-
+          </label>
+
+          <label class="field compact-field speed-field">
+            <span>SPEED</span>
+            <input id="cruiseSpeed" type="number" min="40" max="300" step="1" value="110" inputmode="numeric">
+          </label>
+        </div>
+
+        <button id="briefingButton" class="primary-button" type="button">GET ROUTE WEATHER BRIEFING</button>
+        <p id="formMessage" class="form-message" role="status" aria-live="polite"></p>
+      </section>
+
+      <section id="briefingPanel" class="panel briefing-panel" hidden>
+        <div id="briefingHeader"></div>
+        <div id="limitingBanner"></div>
+        <div id="weatherCards" class="weather-cards" aria-label="Route weather summaries"></div>
+        <div class="map-wrap">
+          <div class="map-title-row"><h2>ROUTE MAP</h2><span id="mapStatus"></span></div>
+          <div id="routeMap" aria-label="Interactive route map"></div>
+        </div>
+      </section>
     </main>
 
-
-    <!-- =====================================================
-         FOOTER
-    ====================================================== -->
-
-    <footer class="app-footer">
-
-        <p>
-            TAKEOFF is a route-awareness aid, not an official aviation
-            meteorological briefing.
-        </p>
-
+    <footer>
+      Forecast information only. Confirm conditions using official aviation weather, NOTAM and operational sources.
     </footer>
+  </div>
 
-</div>
-
-
-<!-- Loading overlay -->
-
-<div
-    id="loadingOverlay"
-    class="loading-overlay hidden"
-    aria-hidden="true"
->
-
+  <datalist id="locationList"></datalist>
+  <div id="loadingOverlay" class="loading-overlay" hidden>
     <div class="loading-card">
-
-        <div class="spinner"></div>
-
-        <h2>Building your briefing</h2>
-
-        <p id="loadingMessage">
-            Resolving route…
-        </p>
-
+      <div class="spinner"></div>
+      <p id="loadingMessage">BUILDING ROUTE WEATHER BRIEFING…</p>
     </div>
+  </div>
 
-</div>
-
-
-<!-- Leaflet map library -->
-
-<script
-    src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
-    integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
-    crossorigin=""
-></script>
-
-
-<!-- TAKEOFF modules -->
-
-<script type="module" src="./app.js"></script>
-
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+  <script type="module" src="app.js"></script>
 </body>
 </html>

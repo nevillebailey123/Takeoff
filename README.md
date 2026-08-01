@@ -1,31 +1,26 @@
-# Takeoff
+# Takeoff v2
 
-Takeoff is an installable progressive web app prototype for NZ route-weather briefing.
+Static New Zealand VFR route-weather briefing prototype.
 
-## Publish with GitHub Pages
+## Run locally
 
-1. Upload all files in this folder to the root of your `takeoff` repository.
-2. In GitHub, open **Settings → Pages**.
-3. Under **Build and deployment**, choose **Deploy from a branch**.
-4. Select branch **main** and folder **/(root)**.
-5. Save.
+```bash
+python3 -m http.server 8000
+```
 
-The site should appear at:
+Then open the forwarded port or `http://localhost:8000`.
 
-`https://nevillebailey123.github.io/takeoff/`
+## Files
 
-Open that address in Safari on your iPad, tap **Share**, then **Add to Home Screen**.
+- `index.html` interface
+- `style.css` responsive styling
+- `app.js` application orchestration
+- `airports.js` location database
+- `routeReferences.js` 50 NM route-reference generation
+- `weather.js` Open-Meteo weather requests and formatting
+- `map.js` Leaflet map rendering
+- `ui.js` briefing UI rendering
+- `storage.js` saved route-entry state
+- `VISION.md` product principles
 
-## Current features
-
-- Departure and destination entry
-- Departure time and cruise altitude
-- Route swap
-- Return trip from the last checked route
-- Favourite routes stored on-device
-- Installable PWA
-- Offline shell after first load
-
-## Important
-
-This prototype does not yet retrieve live aviation weather. It must not be used as the sole source for flight planning or operational decisions.
+Forecast information only. Confirm conditions using official aviation weather and NOTAM sources.

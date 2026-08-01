@@ -1,760 +1,140 @@
-"use strict";
+import { locations, resolveLocation, titleForInput } from './airports.js';
+import { buildRouteReferences, routeDistanceNm } from './routeReferences.js';
+import { fetchRouteWeather } from './weather.js';
+import { saveFlight, loadFlight } from './storage.js';
+import { renderRouteMap, highlightMarker } from './map.js';
+import { populateDaySelect, renderBriefingHeader, renderLimitingBanner, renderWeatherCards, highlightCard } from './ui.js';
 
-/*
-    TAKEOFF
-    New Zealand VFR Weather Briefing
+const $ = id => document.getElementById(id);
+const inputs = {
+  departure: $('departure'), waypoint1: $('waypoint1'), waypoint2: $('waypoint2'), destination: $('destination'),
+  day: $('daySelect'), time: $('departureTime'), period: $('periodToggle'), speed: $('cruiseSpeed')
+};
+const briefingButton = $('briefingButton');
+const briefingPanel = $('briefingPanel');
+const weatherCards = $('weatherCards');
 
-    app.js
-    Main application controller.
-*/
-
-import {
-    resolveRoute
-} from "./airports.js";
-
-import {
-    buildRoutePlan
-} from "./route.js";
-
-import {
-    fetchRouteWeather
-} from "./weather.js";
-
-import {
-    initialiseMap,
-    renderRouteMap
-} from "./map.js";
-
-import {
-    saveFlight,
-    loadFlight,
-    clearSavedFlight
-} from "./storage.js";
-
-import {
-    showLoading,
-    hideLoading,
-    showFormMessage,
-    clearFormMessage,
-    showEntryScreen,
-    showBriefingScreen,
-    renderBriefing
-} from "./ui.js";
-
-
-/* ==========================================================
-   ELEMENTS
-========================================================== */
-
-const departureInput =
-    document.getElementById("departure");
-
-const viaOneInput =
-    document.getElementById("viaOne");
-
-const viaTwoInput =
-    document.getElementById("viaTwo");
-
-const destinationInput =
-    document.getElementById("destination");
-
-const departureTimeInput =
-    document.getElementById("departureTime");
-
-const cruiseSpeedInput =
-    document.getElementById("cruiseSpeed");
-
-const reverseRouteButton =
-    document.getElementById("reverseRouteButton");
-
-const clearFlightButton =
-    document.getElementById("clearFlightButton");
-
-const briefMeButton =
-    document.getElementById("briefMeButton");
-
-
-/* ==========================================================
-   APPLICATION STATE
-========================================================== */
-
-let currentBriefing = null;
-
-let isBriefingInProgress = false;
-
-
-/* ==========================================================
-   START APPLICATION
-========================================================== */
-
-function startApplication() {
-
-    loadSavedFlightIntoForm();
-
-    setDefaultDepartureTime();
-
-    attachEventListeners();
-
-    showEntryScreen();
+function populateLocations() {
+  $('locationList').innerHTML = locations.map(item => `<option value="${item.code}">${item.name}</option><option value="${item.name}">${item.code}</option>`).join('');
 }
 
-
-/* ==========================================================
-   EVENT LISTENERS
-========================================================== */
-
-function attachEventListeners() {
-
-    if (reverseRouteButton) {
-
-        reverseRouteButton.addEventListener(
-            "click",
-            reverseRoute
-        );
-    }
-
-    if (clearFlightButton) {
-
-        clearFlightButton.addEventListener(
-            "click",
-            clearFlight
-        );
-    }
-
-    if (briefMeButton) {
-
-        briefMeButton.addEventListener(
-            "click",
-            createBriefing
-        );
-    }
-
-    const inputs = [
-
-        departureInput,
-        viaOneInput,
-        viaTwoInput,
-        destinationInput,
-        departureTimeInput,
-        cruiseSpeedInput
-
-    ].filter(Boolean);
-
-    inputs.forEach((input) => {
-
-        input.addEventListener(
-            "change",
-            saveCurrentFlight
-        );
-
-        input.addEventListener(
-            "input",
-            clearFormMessage
-        );
-    });
-
-    document.addEventListener(
-        "click",
-        handleDocumentClick
-    );
-
-    document.addEventListener(
-        "keydown",
-        handleKeyboardShortcut
-    );
+function stateFromFields() {
+  return {
+    departure: inputs.departure.value,
+    waypoint1: inputs.waypoint1.value,
+    waypoint2: inputs.waypoint2.value,
+    destination: inputs.destination.value,
+    day: inputs.day.value,
+    time: inputs.time.value,
+    period: inputs.period.textContent,
+    speed: inputs.speed.value
+  };
 }
 
+function saveCurrent() { saveFlight(stateFromFields()); }
 
-/* ==========================================================
-   DYNAMIC BUTTONS
-========================================================== */
-
-function handleDocumentClick(event) {
-
-    const editButton =
-        event.target.closest(
-            "#editFlightButton"
-        );
-
-    if (editButton) {
-
-        editFlight();
-
-        return;
-    }
-
-    const refreshButton =
-        event.target.closest(
-            "#refreshBriefingButton"
-        );
-
-    if (refreshButton) {
-
-        refreshBriefing();
-    }
+function restoreSaved() {
+  const saved = loadFlight();
+  if (!saved) return;
+  Object.entries({ departure:'departure', waypoint1:'waypoint1', waypoint2:'waypoint2', destination:'destination', day:'day', time:'time', speed:'speed' })
+    .forEach(([key, inputKey]) => { if (saved[key] != null) inputs[inputKey].value = saved[key]; });
+  if (saved.period === 'PM') inputs.period.textContent = 'PM';
 }
 
-
-/* ==========================================================
-   CREATE BRIEFING
-========================================================== */
-
-async function createBriefing() {
-
-    if (isBriefingInProgress) {
-
-        return;
-    }
-
-    clearFormMessage();
-
-    const flight =
-        readFlightFromForm();
-
-    const validationMessage =
-        validateFlight(flight);
-
-    if (validationMessage) {
-
-        showFormMessage(
-            validationMessage,
-            "error"
-        );
-
-        return;
-    }
-
-    isBriefingInProgress = true;
-
-    if (briefMeButton) {
-
-        briefMeButton.disabled = true;
-    }
-
-    try {
-
-        showLoading(
-            "Resolving your route…"
-        );
-
-        saveFlight(flight);
-
-        const resolvedPoints =
-            resolveRoute([
-
-                flight.departure,
-                flight.viaOne,
-                flight.viaTwo,
-                flight.destination
-
-            ]);
-
-        showLoading(
-            "Calculating distance and ETA…"
-        );
-
-        const routePlan =
-            buildRoutePlan({
-
-                points:
-                    resolvedPoints,
-
-                departureTime:
-                    flight.departureTime,
-
-                cruiseSpeed:
-                    flight.cruiseSpeed
-
-            });
-
-        showLoading(
-            "Fetching forecast weather…"
-        );
-
-        const weather =
-            await fetchRouteWeather(
-                routePlan
-            );
-
-        showLoading(
-            "Building your briefing…"
-        );
-
-        currentBriefing = {
-
-            flight,
-            routePlan,
-            weather
-
-        };
-
-        renderBriefing(
-            currentBriefing
-        );
-
-        showBriefingScreen();
-
-        /*
-            The map element is created by renderBriefing(),
-            so initialise the map only after rendering.
-        */
-
-        initialiseMap();
-
-        renderRouteMap(
-            currentBriefing
-        );
-
-        window.scrollTo({
-
-            top: 0,
-            behavior: "smooth"
-
-        });
-
-    } catch (error) {
-
-        console.error(
-            "Unable to create briefing:",
-            error
-        );
-
-        showEntryScreen();
-
-        showFormMessage(
-            getFriendlyErrorMessage(error),
-            "error"
-        );
-
-    } finally {
-
-        hideLoading();
-
-        isBriefingInProgress = false;
-
-        if (briefMeButton) {
-
-            briefMeButton.disabled = false;
-        }
-    }
+function normaliseField(input) {
+  const resolved = resolveLocation(input.value);
+  input.value = resolved ? (resolved.code.length <= 4 ? resolved.code : resolved.name.toUpperCase()) : titleForInput(input.value).toUpperCase();
+  saveCurrent();
 }
-
-
-/* ==========================================================
-   REFRESH BRIEFING
-========================================================== */
-
-async function refreshBriefing() {
-
-    await createBriefing();
-}
-
-
-/* ==========================================================
-   EDIT FLIGHT
-========================================================== */
-
-function editFlight() {
-
-    showEntryScreen();
-
-    window.scrollTo({
-
-        top: 0,
-        behavior: "smooth"
-
-    });
-
-    if (departureInput) {
-
-        departureInput.focus();
-    }
-}
-
-
-/* ==========================================================
-   REVERSE ROUTE
-========================================================== */
 
 function reverseRoute() {
-
-    const route = [
-
-        departureInput?.value || "",
-        viaOneInput?.value || "",
-        viaTwoInput?.value || "",
-        destinationInput?.value || ""
-
-    ];
-
-    const reversedRoute =
-        route.reverse();
-
-    departureInput.value =
-        reversedRoute[0] || "";
-
-    viaOneInput.value =
-        reversedRoute[1] || "";
-
-    viaTwoInput.value =
-        reversedRoute[2] || "";
-
-    destinationInput.value =
-        reversedRoute[3] || "";
-
-    saveCurrentFlight();
-
-    clearFormMessage();
+  const values = [inputs.departure.value, inputs.waypoint1.value, inputs.waypoint2.value, inputs.destination.value].filter(Boolean);
+  const reversed = values.reverse();
+  inputs.departure.value = reversed[0] || '';
+  inputs.waypoint1.value = reversed.length === 4 ? reversed[1] : '';
+  inputs.waypoint2.value = reversed.length === 4 ? reversed[2] : '';
+  inputs.destination.value = reversed.length > 1 ? reversed[reversed.length - 1] : '';
+  saveCurrent();
 }
 
-
-/* ==========================================================
-   CLEAR FLIGHT
-========================================================== */
-
-function clearFlight() {
-
-    departureInput.value = "";
-
-    viaOneInput.value = "";
-
-    viaTwoInput.value = "";
-
-    destinationInput.value = "";
-
-    cruiseSpeedInput.value =
-        "110";
-
-    departureTimeInput.value =
-        getDefaultDepartureTime();
-
-    currentBriefing = null;
-
-    clearSavedFlight();
-
-    clearFormMessage();
-
-    departureInput.focus();
+function selectedForecastDate() {
+  const [hour, minute] = inputs.time.value.split(':').map(Number);
+  const date = new Date();
+  date.setDate(date.getDate() + Number(inputs.day.value || 0));
+  let h = hour;
+  if (inputs.period.textContent === 'PM' && h < 12) h += 12;
+  if (inputs.period.textContent === 'AM' && h === 12) h = 0;
+  date.setHours(h, minute || 0, 0, 0);
+  return date;
 }
 
-
-/* ==========================================================
-   FORM DATA
-========================================================== */
-
-function readFlightFromForm() {
-
-    return {
-
-        departure:
-            normaliseText(
-                departureInput?.value
-            ),
-
-        viaOne:
-            normaliseText(
-                viaOneInput?.value
-            ),
-
-        viaTwo:
-            normaliseText(
-                viaTwoInput?.value
-            ),
-
-        destination:
-            normaliseText(
-                destinationInput?.value
-            ),
-
-        departureTime:
-            departureTimeInput?.value || "",
-
-        cruiseSpeed:
-            Number(
-                cruiseSpeedInput?.value
-            )
-
-    };
+function buildUserRoute() {
+  const raw = [inputs.departure.value, inputs.waypoint1.value, inputs.waypoint2.value, inputs.destination.value].filter(Boolean);
+  if (!raw.length) throw new Error('Enter a departure location.');
+  if (raw.length === 1) {
+    const start = resolveLocation(raw[0]);
+    if (!start) throw new Error(`Location not recognised: ${raw[0]}`);
+    return [start];
+  }
+  return raw.map(value => {
+    const point = resolveLocation(value);
+    if (!point) throw new Error(`Location not recognised: ${value}`);
+    return point;
+  });
 }
 
-
-function saveCurrentFlight() {
-
-    const flight =
-        readFlightFromForm();
-
-    saveFlight(flight);
+function selectReference(index) {
+  highlightCard(weatherCards, index);
+  highlightMarker(index);
 }
 
+async function getBriefing() {
+  $('formMessage').textContent = '';
+  briefingButton.disabled = true;
+  $('loadingOverlay').hidden = false;
+  try {
+    const userRoute = buildUserRoute();
+    const references = userRoute.length === 1 ? userRoute : buildRouteReferences(userRoute, 50);
+    const forecastDate = selectedForecastDate();
+    const samples = await fetchRouteWeather(references, forecastDate.toISOString());
+    const distance = userRoute.length === 1 ? 0 : routeDistanceNm(userRoute);
+    const speed = Math.max(40, Number(inputs.speed.value || 110));
+    const etaMinutes = distance / speed * 60;
 
-/* ==========================================================
-   LOAD SAVED FLIGHT
-========================================================== */
-
-function loadSavedFlightIntoForm() {
-
-    const savedFlight =
-        loadFlight();
-
-    if (!savedFlight) {
-
-        cruiseSpeedInput.value =
-            "110";
-
-        return;
-    }
-
-    departureInput.value =
-        savedFlight.departure || "";
-
-    viaOneInput.value =
-        savedFlight.viaOne || "";
-
-    viaTwoInput.value =
-        savedFlight.viaTwo || "";
-
-    destinationInput.value =
-        savedFlight.destination || "";
-
-    departureTimeInput.value =
-        savedFlight.departureTime || "";
-
-    cruiseSpeedInput.value =
-        savedFlight.cruiseSpeed || "110";
+    briefingPanel.hidden = false;
+    renderBriefingHeader($('briefingHeader'), userRoute.map(p => p.name.toUpperCase()), distance, etaMinutes, samples,
+      `${forecastDate.toLocaleDateString('en-NZ',{weekday:'long',day:'numeric',month:'short'}).toUpperCase()} • ${forecastDate.toLocaleTimeString('en-NZ',{hour:'2-digit',minute:'2-digit'})} NZT`);
+    renderLimitingBanner($('limitingBanner'), samples, selectReference);
+    renderWeatherCards(weatherCards, samples, selectReference);
+    renderRouteMap(samples, selectReference);
+    saveCurrent();
+    briefingPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  } catch (error) {
+    $('formMessage').textContent = error.message || 'Unable to build briefing.';
+  } finally {
+    briefingButton.disabled = false;
+    $('loadingOverlay').hidden = true;
+  }
 }
 
+function bindEvents() {
+  $('reverseButton').addEventListener('click', reverseRoute);
+  briefingButton.addEventListener('click', getBriefing);
+  inputs.period.addEventListener('click', () => { inputs.period.textContent = inputs.period.textContent === 'AM' ? 'PM' : 'AM'; saveCurrent(); });
 
-/* ==========================================================
-   VALIDATION
-========================================================== */
+  [inputs.departure, inputs.waypoint1, inputs.waypoint2, inputs.destination].forEach(input => {
+    input.addEventListener('focus', () => setTimeout(() => input.select(), 0));
+    input.addEventListener('blur', () => normaliseField(input));
+    input.addEventListener('input', saveCurrent);
+  });
+  [inputs.day, inputs.time, inputs.speed].forEach(input => input.addEventListener('change', saveCurrent));
 
-function validateFlight(flight) {
-
-    if (!flight.departure) {
-
-        return "Enter a departure point.";
-    }
-
-    if (!flight.destination) {
-
-        return "Enter a destination.";
-    }
-
-    if (!flight.departureTime) {
-
-        return "Select a departure time.";
-    }
-
-    if (
-        !Number.isFinite(
-            flight.cruiseSpeed
-        )
-    ) {
-
-        return "Enter a valid cruise speed.";
-    }
-
-    if (
-        flight.cruiseSpeed < 30 ||
-        flight.cruiseSpeed > 400
-    ) {
-
-        return (
-            "Cruise speed must be between " +
-            "30 and 400 knots."
-        );
-    }
-
-    if (
-        flight.departure.toLowerCase() ===
-        flight.destination.toLowerCase()
-    ) {
-
-        return (
-            "Departure and destination " +
-            "must be different."
-        );
-    }
-
-    return "";
+  document.querySelector('.route-panel').addEventListener('keydown', event => {
+    if (event.key === 'Enter') { event.preventDefault(); getBriefing(); }
+  });
 }
 
-
-/* ==========================================================
-   DEFAULT TIME
-========================================================== */
-
-function setDefaultDepartureTime() {
-
-    if (departureTimeInput.value) {
-
-        return;
-    }
-
-    departureTimeInput.value =
-        getDefaultDepartureTime();
-}
-
-
-function getDefaultDepartureTime() {
-
-    const now =
-        new Date();
-
-    const remainder =
-        now.getMinutes() % 15;
-
-    if (remainder !== 0) {
-
-        now.setMinutes(
-            now.getMinutes() +
-            (15 - remainder)
-        );
-    }
-
-    now.setSeconds(
-        0,
-        0
-    );
-
-    return formatDateTimeLocal(
-        now
-    );
-}
-
-
-function formatDateTimeLocal(date) {
-
-    const year =
-        date.getFullYear();
-
-    const month =
-        String(
-            date.getMonth() + 1
-        ).padStart(2, "0");
-
-    const day =
-        String(
-            date.getDate()
-        ).padStart(2, "0");
-
-    const hours =
-        String(
-            date.getHours()
-        ).padStart(2, "0");
-
-    const minutes =
-        String(
-            date.getMinutes()
-        ).padStart(2, "0");
-
-    return (
-        `${year}-${month}-${day}` +
-        `T${hours}:${minutes}`
-    );
-}
-
-
-/* ==========================================================
-   KEYBOARD SHORTCUT
-========================================================== */
-
-function handleKeyboardShortcut(event) {
-
-    if (
-        event.key !== "Enter" ||
-        event.shiftKey
-    ) {
-
-        return;
-    }
-
-    const activeElement =
-        document.activeElement;
-
-    const isFormInput = [
-
-        departureInput,
-        viaOneInput,
-        viaTwoInput,
-        destinationInput,
-        departureTimeInput,
-        cruiseSpeedInput
-
-    ].includes(activeElement);
-
-    if (!isFormInput) {
-
-        return;
-    }
-
-    event.preventDefault();
-
-    createBriefing();
-}
-
-
-/* ==========================================================
-   HELPERS
-========================================================== */
-
-function normaliseText(value) {
-
-    return String(value || "")
-        .trim()
-        .replace(/\s+/g, " ");
-}
-
-
-function getFriendlyErrorMessage(error) {
-
-    const message =
-        String(
-            error?.message || ""
-        );
-
-    if (
-        message.includes(
-            "could not be found"
-        )
-    ) {
-
-        return message;
-    }
-
-    if (
-        message.toLowerCase().includes(
-            "weather"
-        )
-    ) {
-
-        return (
-            "Weather data could not be loaded. " +
-            "Check your connection and try again."
-        );
-    }
-
-    if (
-        message.toLowerCase().includes(
-            "forecast range"
-        )
-    ) {
-
-        return (
-            "The selected departure time is " +
-            "outside the available forecast range."
-        );
-    }
-
-    return (
-        "The briefing could not be created. " +
-        "Please check the route and try again."
-    );
-}
-
-
-/* ==========================================================
-   START
-========================================================== */
-
-startApplication();
+populateLocations();
+populateDaySelect(inputs.day);
+restoreSaved();
+bindEvents();
