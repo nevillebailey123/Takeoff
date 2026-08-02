@@ -2,6 +2,16 @@ import { locations } from './airports.js';
 
 const EARTH_NM = 3440.065;
 const toRad = deg => deg * Math.PI / 180;
+const NAME_SEARCH_RADIUS_NM = {
+  airport: 55,
+  pass: 40,
+  gorge: 35,
+  airstrip: 35,
+  town: 60,
+  valley: 60,
+  lake: 55,
+  landmark: 70
+};
 
 export function distanceNm(a, b) {
   const dLat = toRad(b.lat - a.lat);
@@ -52,43 +62,40 @@ function isLake(item) {
   return item?.type === 'lake';
 }
 
-function isRiver(item) {
-  return item?.type === 'river';
+function isValley(item) {
+  return item?.type === 'valley';
 }
 
-function fallbackNearestMeaningfulName(point, previousPoint, nextPoint) {
-  const meaningful = new Set(['airport', 'pass', 'gorge', 'airstrip', 'town', 'lake', 'river', 'valley', 'landmark']);
-  const nearestMeaningful = nearestByType(point, item => meaningful.has(String(item?.type || '').toLowerCase()));
-  if (nearestMeaningful) return nearestMeaningful.name;
-
-  const previousDistance = distanceNm(point, previousPoint);
-  const nextDistance = distanceNm(point, nextPoint);
-  return previousDistance <= nextDistance ? previousPoint.name : nextPoint.name;
+function isLandmark(item) {
+  return item?.type === 'landmark';
 }
 
 function chooseReferenceName(mathematicalPoint, previousPoint, nextPoint) {
-  const nearestAirport = nearestByType(mathematicalPoint, isAirport, 35);
+  const nearestAirport = nearestByType(mathematicalPoint, isAirport, NAME_SEARCH_RADIUS_NM.airport);
   if (nearestAirport) return nearestAirport.name;
 
-  const nearestPass = nearestByType(mathematicalPoint, isMountainPass, 25);
+  const nearestPass = nearestByType(mathematicalPoint, isMountainPass, NAME_SEARCH_RADIUS_NM.pass);
   if (nearestPass) return nearestPass.name;
 
-  const nearestGorge = nearestByType(mathematicalPoint, isGorge, 20);
+  const nearestGorge = nearestByType(mathematicalPoint, isGorge, NAME_SEARCH_RADIUS_NM.gorge);
   if (nearestGorge) return nearestGorge.name;
 
-  const nearestAirstrip = nearestByType(mathematicalPoint, isAirstrip, 20);
+  const nearestAirstrip = nearestByType(mathematicalPoint, isAirstrip, NAME_SEARCH_RADIUS_NM.airstrip);
   if (nearestAirstrip) return nearestAirstrip.name;
 
-  const nearestTown = nearestByType(mathematicalPoint, isTown, 18);
+  const nearestTown = nearestByType(mathematicalPoint, isTown, NAME_SEARCH_RADIUS_NM.town);
   if (nearestTown) return nearestTown.name;
 
-  const nearestLake = nearestByType(mathematicalPoint, isLake, 20);
+  const nearestValley = nearestByType(mathematicalPoint, isValley, NAME_SEARCH_RADIUS_NM.valley);
+  if (nearestValley) return nearestValley.name;
+
+  const nearestLake = nearestByType(mathematicalPoint, isLake, NAME_SEARCH_RADIUS_NM.lake);
   if (nearestLake) return nearestLake.name;
 
-  const nearestRiver = nearestByType(mathematicalPoint, isRiver, 20);
-  if (nearestRiver) return nearestRiver.name;
+  const nearestLandmark = nearestByType(mathematicalPoint, isLandmark, NAME_SEARCH_RADIUS_NM.landmark);
+  if (nearestLandmark) return nearestLandmark.name;
 
-  return fallbackNearestMeaningfulName(mathematicalPoint, previousPoint, nextPoint);
+  return `Between ${previousPoint.name} and ${nextPoint.name}`;
 }
 
 export function buildRouteReferences(userPoints, targetSpacingNm = 50) {
