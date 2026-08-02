@@ -39,6 +39,21 @@ const popupContent = sample => `<div>
 
 const hoverContent = sample => `${sample.name} · ${formatCloudForSurface(sample, 'hover')}`;
 
+function windArrowFromDirection(direction) {
+  if (!Number.isFinite(direction)) return null;
+  const normalized = ((Math.round(direction) % 360) + 360) % 360;
+  const index = Math.round(normalized / 45) % 8;
+  const arrows = ['↑', '↗', '→', '↘', '↓', '↙', '←', '↖'];
+  return arrows[index] || null;
+}
+
+function markerWindIndicator(sample) {
+  const arrow = windArrowFromDirection(sample.windDirection);
+  if (!arrow || !Number.isFinite(sample.windKt)) return '';
+  const speed = String(Math.max(0, Math.round(sample.windKt))).padStart(2, '0');
+  return `<span class="route-marker-wind">${arrow}${speed}</span>`;
+}
+
 function ensureMap() {
   if (map) return map;
   map = L.map('routeMap', { zoomControl: true, preferCanvas: true });
@@ -74,8 +89,8 @@ export function renderRouteMap(routeLinePoints, weatherReferencePoints, onSelect
     const isAirport = sample.type === 'airport';
     const icon = L.divIcon({
       className: '',
-      html: `<div class="route-marker ${isAirport ? 'airport' : ''}" style="background:${statusColour(sample.status)}"></div>`,
-      iconSize: [18, 18],
+      html: `<div class="route-marker-wrap"><div class="route-marker ${isAirport ? 'airport' : ''}" style="background:${statusColour(sample.status)}"></div>${markerWindIndicator(sample)}</div>`,
+      iconSize: [58, 24],
       iconAnchor: [9, 9]
     });
     const marker = L.marker([sample.lat, sample.lon], { icon }).addTo(layerGroup);

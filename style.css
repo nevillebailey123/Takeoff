@@ -78,6 +78,14 @@ input::placeholder { color: #607b99; }
 .route-marker { width: 16px; height: 16px; border-radius: 50%; border: 1px solid rgba(0,0,0,.75); box-shadow: 0 0 0 1px rgba(255,255,255,.5); }
 .route-marker.airport { box-shadow: 0 0 0 2px #fff, 0 0 0 4px rgba(255,255,255,.75); }
 .route-marker.active { transform: scale(1.3); box-shadow: 0 0 0 3px #fff; }
+.route-marker-wrap { position: relative; width: 58px; height: 24px; }
+.route-marker-wrap .route-marker { position: absolute; left: 0; top: 4px; }
+.route-marker-wind {
+  position: absolute; left: 20px; top: -1px;
+  color: #0b1d2f; background: rgba(255,255,255,.9); border: 1px solid rgba(0,0,0,.2);
+  border-radius: 6px; padding: 1px 5px; line-height: 1.2; font-size: 11px; font-weight: 800;
+  letter-spacing: .2px; font-variant-numeric: tabular-nums; white-space: nowrap;
+}
 
 .loading-overlay { position: fixed; inset: 0; background: rgba(2,10,18,.78); display: grid; place-items: center; z-index: 9999; }
 .loading-overlay[hidden] { display: none; }

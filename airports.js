@@ -2,6 +2,7 @@ import { landmarks } from './landmarks.js';
 
 export const airports = [
   { code: 'NZAA', name: 'Auckland', type: 'airport', hasMetar: true, hasTaf: true, lat: -37.0082, lon: 174.7850, elevationFt: 23 },
+  { code: 'NZAP', name: 'Taupo', type: 'airport', hasMetar: false, hasTaf: false, lat: -38.7397, lon: 176.0840, elevationFt: 1335 },
   { code: 'NZAR', name: 'Ardmore', type: 'airport', hasMetar: true, hasTaf: true, lat: -37.0297, lon: 174.9733, elevationFt: 111 },
   { code: 'NZAS', name: 'Ashburton', type: 'airport', hasMetar: true, hasTaf: true, lat: -43.9033, lon: 171.7967, elevationFt: 298 },
   { code: 'NZCH', name: 'Christchurch', type: 'airport', hasMetar: true, hasTaf: true, lat: -43.4894, lon: 172.5322, elevationFt: 123 },
@@ -32,10 +33,12 @@ export const airports = [
   { code: 'NZPM', name: 'Palmerston North', type: 'airport', hasMetar: true, hasTaf: true, lat: -40.3206, lon: 175.6172, elevationFt: 151 },
   { code: 'NZPP', name: 'Paraparaumu', type: 'airport', hasMetar: true, hasTaf: true, lat: -40.9047, lon: 174.9892, elevationFt: 22 },
   { code: 'NZQN', name: 'Queenstown', type: 'airport', hasMetar: true, hasTaf: true, lat: -45.0211, lon: 168.7392, elevationFt: 1171 },
+  { code: 'NZRC', name: "Ryan's Creek", type: 'airport', hasMetar: false, hasTaf: false, lat: -46.8997, lon: 168.1010, elevationFt: 62 },
   { code: 'NZRO', name: 'Rotorua', type: 'airport', hasMetar: true, hasTaf: true, lat: -38.1092, lon: 176.3172, elevationFt: 935 },
+  { code: 'NZTK', name: 'Takaka', type: 'airport', hasMetar: false, hasTaf: false, lat: -40.8133, lon: 172.7750, elevationFt: 102 },
   { code: 'NZTG', name: 'Tauranga', type: 'airport', hasMetar: true, hasTaf: true, lat: -37.6719, lon: 176.1961, elevationFt: 13 },
   { code: 'NZTH', name: 'Thames', type: 'airport', hasMetar: true, hasTaf: false, lat: -37.1567, lon: 175.5519, elevationFt: 10 },
-  { code: 'NZTL', name: 'Lake Tekapo', type: 'airport', hasMetar: true, hasTaf: false, lat: -44.2350, lon: 170.1183, elevationFt: 2245 },
+  { code: 'NZTL', name: 'Tekapo', type: 'airport', hasMetar: true, hasTaf: false, lat: -44.0053, lon: 170.4440, elevationFt: 2496 },
   { code: 'NZTM', name: 'Taumarunui', type: 'airport', hasMetar: true, hasTaf: false, lat: -38.8422, lon: 175.2581, elevationFt: 1125 },
   { code: 'NZTU', name: 'Timaru', type: 'airport', hasMetar: true, hasTaf: true, lat: -44.3028, lon: 171.2253, elevationFt: 89 },
   { code: 'NZUK', name: 'Pukaki', type: 'airport', hasMetar: true, hasTaf: true, lat: -44.2350, lon: 170.1183, elevationFt: 1575 },
@@ -43,8 +46,10 @@ export const airports = [
   { code: 'NZWF', name: 'Wanaka', type: 'airport', hasMetar: true, hasTaf: true, lat: -44.7222, lon: 169.2456, elevationFt: 1142 },
   { code: 'NZWH', name: 'Whenuapai', type: 'airport', hasMetar: true, hasTaf: true, lat: -36.7878, lon: 174.6328, elevationFt: 90 },
   { code: 'NZWN', name: 'Wellington', type: 'airport', hasMetar: true, hasTaf: true, lat: -41.3272, lon: 174.8053, elevationFt: 42 },
+  { code: 'NZWK', name: 'Whakatane', type: 'airport', hasMetar: false, hasTaf: false, lat: -37.9222, lon: 176.9170, elevationFt: 20 },
   { code: 'NZWO', name: 'Wairoa', type: 'airport', hasMetar: true, hasTaf: false, lat: -39.0069, lon: 177.4067, elevationFt: 42 },
   { code: 'NZWR', name: 'Whangarei', type: 'airport', hasMetar: true, hasTaf: false, lat: -35.7683, lon: 174.3650, elevationFt: 133 },
+  { code: 'NZWT', name: 'Whitianga', type: 'airport', hasMetar: false, hasTaf: false, lat: -36.8287, lon: 175.6828, elevationFt: 10 },
   { code: 'NZWU', name: 'Whanganui', type: 'airport', hasMetar: true, hasTaf: true, lat: -39.9622, lon: 175.0253, elevationFt: 27 },
   { code: 'NZWL', name: 'Westport', type: 'airport', hasMetar: true, hasTaf: false, lat: -41.7381, lon: 171.5808, elevationFt: 13 }
 ];

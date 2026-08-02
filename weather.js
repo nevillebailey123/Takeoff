@@ -1016,10 +1016,17 @@ export async function fetchRouteWeather(routeReferences, forecastIso, options = 
     const weather = weatherByIndex.get(pointIndex);
     if (!weather) throw new Error('Weather data unavailable for one or more route points. Please try again.');
 
-    const terrainElevationFt = Number.isFinite(point.elevationFt) ? point.elevationFt : null;
+    const terrainElevationFt = Number.isFinite(point.terrainElevationFt)
+      ? point.terrainElevationFt
+      : Number.isFinite(point.elevationFt)
+        ? point.elevationFt
+        : null;
     const sample = {
       ...point,
-      elevationFt: terrainElevationFt,
+      elevationFt: Number.isFinite(point.elevationFt) ? point.elevationFt : null,
+      latitude: point.lat,
+      longitude: point.lon,
+      terrainElevationFt,
       source: weather.source,
       sourceReason: weather.sourceReason || null,
       sourceLabel: weather.sourceLabel || weather.source,

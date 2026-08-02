@@ -1,6 +1,7 @@
 import { locations, resolveLocation, titleForInput } from './airports.js';
 import { buildRouteReferences, routeDistanceNm } from './routeReferences.js';
 import { fetchRouteWeather } from './weather.js';
+import { getTerrainElevation } from './terrain.js';
 import { saveFlight, loadFlight } from './storage.js';
 import { renderRouteMap, highlightMarker } from './map.js';
 import { populateDaySelect, renderBriefingHeader, renderLimitingBanner, renderWeatherCards, highlightCard } from './ui.js';
@@ -212,6 +213,23 @@ function selectReference(index) {
   highlightMarker(index);
 }
 
+async function attachTerrainData(points) {
+  const terrainElevations = await Promise.all(points.map(point => getTerrainElevation(point.lat, point.lon)));
+  return points.map((point, index) => ({
+    ...point,
+    terrainElevationFt: terrainElevations[index]
+  }));
+}
+
+function logTerrainDiagnostics(samples) {
+  console.info('[Takeoff terrain diagnostic]', samples.map(sample => ({
+    point: sample.name,
+    latitude: Number.isFinite(sample.lat) ? Number(sample.lat.toFixed(4)) : null,
+    longitude: Number.isFinite(sample.lon) ? Number(sample.lon.toFixed(4)) : null,
+    terrainElevationFt: Number.isFinite(sample.terrainElevationFt) ? sample.terrainElevationFt : null
+  })));
+}
+
 async function getBriefing() {
   $('formMessage').textContent = '';
   briefingButton.disabled = true;
@@ -219,12 +237,14 @@ async function getBriefing() {
   try {
     const userRoute = buildUserRoute();
     const references = userRoute.length === 1 ? userRoute : buildRouteReferences(userRoute, 50);
+    const terrainReferences = await attachTerrainData(references);
     const forecastDate = selectedForecastDate();
     const speed = Math.max(40, Number(inputs.speed.value || 110));
-    const samples = await fetchRouteWeather(references, forecastDate.toISOString(), {
+    const samples = await fetchRouteWeather(terrainReferences, forecastDate.toISOString(), {
       departureIso: forecastDate.toISOString(),
       cruiseSpeedKt: speed
     });
+    logTerrainDiagnostics(samples);
     const distance = userRoute.length === 1 ? 0 : routeDistanceNm(userRoute);
     const etaMinutes = distance / speed * 60;
 
