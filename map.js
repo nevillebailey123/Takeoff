@@ -1,3 +1,5 @@
+import { formatCloud } from './cloudFormatting.js';
+
 let map;
 let layerGroup;
 let markers = [];
@@ -6,13 +8,15 @@ const statusColour = status => ({
   good: '#22c55e', review: '#eab308', caution: '#f97316', poor: '#ef4444', unknown: '#64748b'
 }[status] || '#64748b');
 
-const formatCloud = sample => sample.cloudDisplay || '—';
+const formatCloudForSurface = (sample, surface) => formatCloud(sample, { surface });
 
-const formatVisibility = sample => sample.source === 'METAR'
-  ? (sample.visibilityText || '—')
-  : Number.isFinite(sample.visibilityKm)
-    ? (sample.visibilityKm >= 20 ? '>20 KM' : `${Math.round(sample.visibilityKm)} KM`)
-    : '—';
+const formatVisibility = sample => sample.cavokReported
+  ? '≥10 KM'
+  : sample.source === 'METAR' || sample.source === 'TAF'
+    ? (sample.visibilityText || (Number.isFinite(sample.visibilityKm) ? `${Math.round(sample.visibilityKm)} KM` : '—'))
+    : Number.isFinite(sample.visibilityKm)
+      ? (sample.visibilityKm >= 20 ? '>20 KM' : `${Math.round(sample.visibilityKm)} KM`)
+      : '—';
 
 const formatWind = sample => sample.source === 'METAR' && sample.windText
   ? sample.windText
@@ -22,7 +26,7 @@ const formatRain = sample => sample.precipitationMm > .2 ? `${sample.precipitati
 
 const popupContent = sample => `<div>
   <strong>${sample.name.toUpperCase()}</strong><br>
-  Cloud base: ${formatCloud(sample)}<br>
+  Cloud: ${formatCloudForSurface(sample, 'popup')}<br>
   Visibility: ${formatVisibility(sample)}<br>
   Wind: ${formatWind(sample)}<br>
   Rain: ${formatRain(sample)}<br>
@@ -32,6 +36,8 @@ const popupContent = sample => `<div>
   Obs Time: ${sample.metarObsTime || '—'}<br>` : ''}
   ${sample.sourceLabel || sample.source || 'Forecast'}
 </div>`;
+
+const hoverContent = sample => `${sample.name} · ${formatCloudForSurface(sample, 'hover')}`;
 
 function ensureMap() {
   if (map) return map;
@@ -78,7 +84,7 @@ export function renderRouteMap(routeLinePoints, weatherReferencePoints, onSelect
       onSelect(index);
       L.DomEvent.stopPropagation(event);
     });
-    marker.bindTooltip(sample.name, { direction: 'top', offset: [0, -8] });
+    marker.bindTooltip(hoverContent(sample), { direction: 'top', offset: [0, -8] });
     return marker;
   });
 

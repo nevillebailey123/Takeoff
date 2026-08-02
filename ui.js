@@ -1,4 +1,4 @@
-const statusLabel = status => ({ good: 'GOOD', review: 'REVIEW', caution: 'CAUTION', poor: 'POOR', unknown: 'UNKNOWN' }[status]);
+import { formatCloud, numericCloudBaseForComparison } from './cloudFormatting.js';
 
 export function populateDaySelect(select) {
   select.innerHTML = '';
@@ -28,23 +28,29 @@ export function renderBriefingHeader(container, routeNames, distanceNm, etaMinut
 export function renderLimitingBanner(container, samples, onSelect) {
   const comparable = samples.map((sample, index) => ({ sample, index }));
   const lowestCloud = comparable
-    .filter(x => Number.isFinite(x.sample.cloudStatusFt) && (x.sample.cloudStatusFt > 0 || x.sample.cloudIsVerticalVisibility))
-    .sort((a,b) => a.sample.cloudStatusFt - b.sample.cloudStatusFt)[0];
-  const candidates = [
-    lowestCloud && { label: 'LOWEST CLOUD', value: lowestCloud.sample.cloudDisplay || '—', ...lowestCloud }
-  ].filter(Boolean);
-  const chosen = candidates[0];
-  if (!chosen) { container.innerHTML = ''; return; }
-  container.innerHTML = `<button type="button" class="limiting-banner card-${chosen.sample.status || 'unknown'}" id="limitingButton"><strong>${chosen.label}: ${chosen.sample.name}</strong><span>${chosen.value}</span></button>`;
-  container.querySelector('#limitingButton').addEventListener('click', () => onSelect(chosen.index));
+    .filter(item => Number.isFinite(numericCloudBaseForComparison(item.sample)))
+    .sort((a, b) => numericCloudBaseForComparison(a.sample) - numericCloudBaseForComparison(b.sample))[0];
+
+  if (!lowestCloud) {
+    container.innerHTML = `<div class="limiting-banner card-unknown"><strong>NO SIGNIFICANT CLOUD BASE REPORTED</strong></div>`;
+    return;
+  }
+
+  const value = formatCloud(lowestCloud.sample, { surface: 'banner' }) || '—';
+  container.innerHTML = `<button type="button" class="limiting-banner card-${lowestCloud.sample.status || 'unknown'}" id="limitingButton"><strong>LOWEST CLOUD BASE: ${lowestCloud.sample.name}</strong><span>${value}</span></button>`;
+  container.querySelector('#limitingButton').addEventListener('click', () => onSelect(lowestCloud.index));
 }
 
 export function renderWeatherCards(container, samples, onSelect) {
   container.innerHTML = samples.map((sample, index) => {
-    const cloud = sample.cloudDisplay || '—';
-    const visibility = sample.source === 'METAR'
-      ? (sample.visibilityText || '—')
-      : Number.isFinite(sample.visibilityKm) ? (sample.visibilityKm >= 20 ? '>20 KM' : `${Math.round(sample.visibilityKm)} KM`) : '—';
+    const cloud = formatCloud(sample, { surface: 'card' });
+    const visibility = sample.cavokReported
+      ? '≥10 KM'
+      : sample.source === 'METAR' || sample.source === 'TAF'
+        ? (sample.visibilityText || (Number.isFinite(sample.visibilityKm) ? `${Math.round(sample.visibilityKm)} KM` : '—'))
+        : Number.isFinite(sample.visibilityKm)
+          ? (sample.visibilityKm >= 20 ? '>20 KM' : `${Math.round(sample.visibilityKm)} KM`)
+          : '—';
     const wind = sample.source === 'METAR' && sample.windText
       ? sample.windText
       : `${String(sample.windDirection).padStart(3,'0')}/${sample.windKt}${sample.gustKt > sample.windKt ? ` G${sample.gustKt}` : ''}`;

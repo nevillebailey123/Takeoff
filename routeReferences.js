@@ -19,23 +19,82 @@ export function interpolate(a, b, fraction) {
   };
 }
 
-function nearestNamedLocation(point, usedNames, maxDistanceNm = 35) {
+function nearestByType(point, predicate, maxDistanceNm = Infinity) {
   const candidates = locations
-    .filter(item => !usedNames.has(item.name.toUpperCase()))
+    .filter(predicate)
     .map(item => ({ item, distance: distanceNm(point, item) }))
     .filter(entry => entry.distance <= maxDistanceNm)
     .sort((a, b) => a.distance - b.distance);
   return candidates[0]?.item || null;
 }
 
+function isAirport(item) {
+  return item?.type === 'airport';
+}
+
+function isMountainPass(item) {
+  return item?.type === 'pass';
+}
+
+function isGorge(item) {
+  return item?.type === 'gorge';
+}
+
+function isAirstrip(item) {
+  return item?.type === 'airstrip';
+}
+
+function isTown(item) {
+  return item?.type === 'town';
+}
+
+function isLake(item) {
+  return item?.type === 'lake';
+}
+
+function isRiver(item) {
+  return item?.type === 'river';
+}
+
+function fallbackNearestMeaningfulName(point, previousPoint, nextPoint) {
+  const meaningful = new Set(['airport', 'pass', 'gorge', 'airstrip', 'town', 'lake', 'river', 'valley', 'landmark']);
+  const nearestMeaningful = nearestByType(point, item => meaningful.has(String(item?.type || '').toLowerCase()));
+  if (nearestMeaningful) return nearestMeaningful.name;
+
+  const previousDistance = distanceNm(point, previousPoint);
+  const nextDistance = distanceNm(point, nextPoint);
+  return previousDistance <= nextDistance ? previousPoint.name : nextPoint.name;
+}
+
+function chooseReferenceName(mathematicalPoint, previousPoint, nextPoint) {
+  const nearestAirport = nearestByType(mathematicalPoint, isAirport, 35);
+  if (nearestAirport) return nearestAirport.name;
+
+  const nearestPass = nearestByType(mathematicalPoint, isMountainPass, 25);
+  if (nearestPass) return nearestPass.name;
+
+  const nearestGorge = nearestByType(mathematicalPoint, isGorge, 20);
+  if (nearestGorge) return nearestGorge.name;
+
+  const nearestAirstrip = nearestByType(mathematicalPoint, isAirstrip, 20);
+  if (nearestAirstrip) return nearestAirstrip.name;
+
+  const nearestTown = nearestByType(mathematicalPoint, isTown, 18);
+  if (nearestTown) return nearestTown.name;
+
+  const nearestLake = nearestByType(mathematicalPoint, isLake, 20);
+  if (nearestLake) return nearestLake.name;
+
+  const nearestRiver = nearestByType(mathematicalPoint, isRiver, 20);
+  if (nearestRiver) return nearestRiver.name;
+
+  return fallbackNearestMeaningfulName(mathematicalPoint, previousPoint, nextPoint);
+}
+
 export function buildRouteReferences(userPoints, targetSpacingNm = 50) {
   const result = [];
-  const usedNames = new Set();
 
   const pushUnique = point => {
-    const name = point.name.toUpperCase();
-    if (usedNames.has(name)) return;
-    usedNames.add(name);
     result.push(point);
   };
 
@@ -49,26 +108,16 @@ export function buildRouteReferences(userPoints, targetSpacingNm = 50) {
 
     for (let i = 1; i < intervals; i += 1) {
       const mathematicalPoint = interpolate(start, end, i / intervals);
-      const named = nearestNamedLocation(mathematicalPoint, usedNames, 40);
-      if (named) {
-        pushUnique({
-          ...named,
-          lat: mathematicalPoint.lat,
-          lon: mathematicalPoint.lon,
-          elevationFt: null,
-          automatic: true
-        });
-      } else {
-        pushUnique({
-          code: `ENR${index + 1}-${i}`,
-          name: `Enroute ${result.length}`,
-          type: 'enroute',
-          lat: mathematicalPoint.lat,
-          lon: mathematicalPoint.lon,
-          elevationFt: null,
-          automatic: true
-        });
-      }
+      const displayName = chooseReferenceName(mathematicalPoint, start, end);
+      pushUnique({
+        code: `REF${index + 1}-${i}`,
+        name: displayName,
+        type: 'enroute',
+        lat: mathematicalPoint.lat,
+        lon: mathematicalPoint.lon,
+        elevationFt: null,
+        automatic: true
+      });
     }
 
     pushUnique({ ...end, userEntered: true });

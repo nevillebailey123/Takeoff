@@ -2,10 +2,33 @@ import { locations } from './airports.js';
 import { buildMetarUrl, buildTafUrl, normalizeMetar, normalizeTaf } from './providerAdapter.js';
 
 const API = 'https://api.open-meteo.com/v1/forecast';
-const HOURLY_FIELDS = 'temperature_2m,dew_point_2m,visibility,precipitation,weather_code,wind_speed_10m,wind_direction_10m,wind_gusts_10m';
+const PRESSURE_LEVELS = [1000, 975, 950, 925, 900, 850, 800, 700];
+const HOURLY_FIELDS = [
+  'cloud_cover',
+  'cloud_cover_low',
+  'cloud_cover_mid',
+  'cloud_cover_high',
+  'temperature_2m',
+  'dew_point_2m',
+  'visibility',
+  'precipitation',
+  'weather_code',
+  'wind_speed_10m',
+  'wind_direction_10m',
+  'wind_gusts_10m',
+  ...PRESSURE_LEVELS.flatMap(level => [
+    `relative_humidity_${level}hPa`,
+    `cloud_cover_${level}hPa`,
+    `geopotential_height_${level}hPa`
+  ])
+].join(',');
 const NEARBY_THRESHOLD_NM = 3;
 const MAX_COORDS_PER_BATCH = 40;
 const REPORTING_AIRPORT_THRESHOLD_NM = 25;
+const AIRPORT_REPORT_LOOKUPS_ENABLED = true;
+const LOW_LEVEL_MAX_METERS = 3000;
+const FT_PER_METER = 3.28084;
+const MOIST_WEATHER_CODES = new Set([45, 48, 51, 53, 55, 56, 57, 61, 63, 65, 66, 67, 71, 73, 75, 77, 80, 81, 82, 85, 86]);
 
 function nearestIndex(times, targetIso) {
   const target = new Date(targetIso).getTime();
@@ -20,7 +43,173 @@ function nearestIndex(times, targetIso) {
 
 function estimateCloudBaseFt(tempC, dewC) {
   if (!Number.isFinite(tempC) || !Number.isFinite(dewC)) return null;
-  return Math.max(0, (tempC - dewC) * 400);
+  const lclFt = Math.max(0, (tempC - dewC) * 400);
+  return Math.min(Math.max(lclFt, 0), 20000);
+}
+
+function percentOrNull(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? Math.max(0, Math.min(100, number)) : null;
+}
+
+function metersToFeet(value) {
+  return Number.isFinite(value) ? value * FT_PER_METER : null;
+}
+
+function interpolateHeightFt(lowerLevel, upperLevel, threshold, key) {
+  if (!lowerLevel || !upperLevel) return null;
+  const lowerValue = Number(lowerLevel[key]);
+  const upperValue = Number(upperLevel[key]);
+  const lowerHeight = Number(lowerLevel.heightFt);
+  const upperHeight = Number(upperLevel.heightFt);
+  if (![lowerValue, upperValue, lowerHeight, upperHeight].every(Number.isFinite)) return null;
+  if (upperValue === lowerValue) return upperHeight;
+  const ratio = (threshold - lowerValue) / (upperValue - lowerValue);
+  const clampedRatio = Math.max(0, Math.min(1, ratio));
+  return lowerHeight + (upperHeight - lowerHeight) * clampedRatio;
+}
+
+function normalizeWeatherCode(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
+function weatherCodeSuggestsMoisture(code) {
+  return MOIST_WEATHER_CODES.has(normalizeWeatherCode(code));
+}
+
+function buildPressureLevels(sample) {
+  return PRESSURE_LEVELS.map(level => {
+    const heightMeters = Number(sample[`geopotential_height_${level}hPa`]);
+    return {
+      pressureHpa: level,
+      heightMeters: Number.isFinite(heightMeters) ? heightMeters : null,
+      heightFt: metersToFeet(Number.isFinite(heightMeters) ? heightMeters : null),
+      relativeHumidityPercent: percentOrNull(sample[`relative_humidity_${level}hPa`]),
+      cloudCoverPercent: percentOrNull(sample[`cloud_cover_${level}hPa`])
+    };
+  }).filter(level => Number.isFinite(level.heightMeters));
+}
+
+function adjacentHumiditySupportsLayer(levels, index) {
+  const current = levels[index];
+  if (!current || !Number.isFinite(current.relativeHumidityPercent)) return false;
+  const neighbors = [levels[index - 1], levels[index + 1]].filter(Boolean);
+  return neighbors.some(level => Number.isFinite(level.relativeHumidityPercent) && level.relativeHumidityPercent >= 85);
+}
+
+function estimateLayerHeightFt(levels, index, metricKey, threshold) {
+  const current = levels[index];
+  if (!current || !Number.isFinite(current.heightFt)) return null;
+  const lower = levels[index - 1];
+  if (!lower) return current.heightFt;
+
+  const lowerValue = Number(lower[metricKey]);
+  const currentValue = Number(current[metricKey]);
+  if (!Number.isFinite(lowerValue) || !Number.isFinite(currentValue)) return current.heightFt;
+  if (lowerValue >= threshold) return lower.heightFt;
+  if (currentValue < threshold) return current.heightFt;
+
+  const interpolated = interpolateHeightFt(lower, current, threshold, metricKey);
+  return Number.isFinite(interpolated) ? interpolated : current.heightFt;
+}
+
+function classifyModelCloud(sample) {
+  const cloudCoverLowPercent = percentOrNull(sample.cloudCoverLowPercent);
+  const pressureLevels = buildPressureLevels(sample);
+  const lowLevelPressureLevels = pressureLevels.filter(level => level.heightMeters <= LOW_LEVEL_MAX_METERS);
+  const pressureCloudLevelExists = lowLevelPressureLevels.some(level => Number.isFinite(level.cloudCoverPercent) && level.cloudCoverPercent >= 50);
+  const pressureHumidityLayerExists = lowLevelPressureLevels.some((level, index) => {
+    if (!Number.isFinite(level.relativeHumidityPercent) || level.relativeHumidityPercent < 90) return false;
+    return adjacentHumiditySupportsLayer(lowLevelPressureLevels, index);
+  });
+  const lowLevelMoistureExists = lowLevelPressureLevels.some(level => {
+    return Number.isFinite(level.relativeHumidityPercent) && level.relativeHumidityPercent >= 85;
+  });
+  const weatherSupportsCloud = weatherCodeSuggestsMoisture(sample.weatherCode) && (lowLevelMoistureExists || (Number.isFinite(cloudCoverLowPercent) && cloudCoverLowPercent >= 20));
+  const significantLowCloudLikely = (Number.isFinite(cloudCoverLowPercent) && cloudCoverLowPercent >= 50) || pressureCloudLevelExists || pressureHumidityLayerExists || weatherSupportsCloud;
+  const nilConditions = Number.isFinite(cloudCoverLowPercent) && cloudCoverLowPercent < 20 && !pressureCloudLevelExists && !pressureHumidityLayerExists && !weatherSupportsCloud;
+
+  if (nilConditions) {
+    return {
+      cloudBaseAmslFt: null,
+      cloudBaseAglFt: null,
+      cloudState: 'nil',
+      cloudMethod: 'nil',
+      cloudStatusFt: null,
+      cloudIsVerticalVisibility: false,
+      cloudDisplay: 'NIL',
+      cloudRawLayers: [],
+      cloudSelectedLayer: null
+    };
+  }
+
+  let selectedLevel = null;
+  let cloudMethod = null;
+  let cloudBaseAmslFt = null;
+
+  for (let index = 0; index < lowLevelPressureLevels.length; index += 1) {
+    const level = lowLevelPressureLevels[index];
+    const cloudCover = Number(level.cloudCoverPercent);
+    const relativeHumidity = Number(level.relativeHumidityPercent);
+
+    if (Number.isFinite(cloudCover) && cloudCover >= 50) {
+      selectedLevel = level;
+      cloudMethod = 'pressure-cloud';
+      cloudBaseAmslFt = estimateLayerHeightFt(lowLevelPressureLevels, index, 'cloudCoverPercent', 50);
+      break;
+    }
+
+    if (Number.isFinite(relativeHumidity) && relativeHumidity >= 90 && adjacentHumiditySupportsLayer(lowLevelPressureLevels, index)) {
+      selectedLevel = level;
+      cloudMethod = 'pressure-humidity';
+      cloudBaseAmslFt = estimateLayerHeightFt(lowLevelPressureLevels, index, 'relativeHumidityPercent', 90);
+      break;
+    }
+  }
+
+  if (!Number.isFinite(cloudBaseAmslFt) && significantLowCloudLikely) {
+    const lclAmslFt = estimateCloudBaseFt(sample.temperature2mC, sample.dewPoint2mC);
+    if (Number.isFinite(lclAmslFt)) {
+      const terrainFloorFt = Number.isFinite(sample.terrainElevationFt) ? sample.terrainElevationFt : 0;
+      cloudBaseAmslFt = Math.max(terrainFloorFt, Math.min(lclAmslFt, 20000));
+      cloudMethod = 'lcl-fallback';
+    }
+  }
+
+  if (!Number.isFinite(cloudBaseAmslFt)) {
+    return {
+      cloudBaseAmslFt: null,
+      cloudBaseAglFt: null,
+      cloudState: 'unknown',
+      cloudMethod: null,
+      cloudStatusFt: null,
+      cloudIsVerticalVisibility: false,
+      cloudDisplay: '—',
+      cloudRawLayers: [],
+      cloudSelectedLayer: selectedLevel,
+      cloudCoverLowPercent,
+      cloudCoverMidPercent: percentOrNull(sample.cloudCoverMidPercent),
+      cloudCoverHighPercent: percentOrNull(sample.cloudCoverHighPercent)
+    };
+  }
+
+  const roundedCloudBaseAmslFt = Math.round(cloudBaseAmslFt / 100) * 100;
+
+  return {
+    cloudBaseAmslFt: roundedCloudBaseAmslFt,
+    cloudBaseAglFt: null,
+    cloudState: 'numeric',
+    cloudMethod,
+    cloudStatusFt: roundedCloudBaseAmslFt,
+    cloudIsVerticalVisibility: false,
+    cloudDisplay: `${roundedCloudBaseAmslFt} ft`,
+    cloudRawLayers: [],
+    cloudSelectedLayer: selectedLevel,
+    cloudCoverLowPercent,
+    cloudCoverMidPercent: percentOrNull(sample.cloudCoverMidPercent),
+    cloudCoverHighPercent: percentOrNull(sample.cloudCoverHighPercent)
+  };
 }
 
 function visibilityKm(valueM) {
@@ -168,31 +357,11 @@ function buildAirportCloudState(cloudState, terrainElevationFt) {
   };
 }
 
-function buildForecastCloudState(amslFt) {
-  if (!Number.isFinite(amslFt)) {
-    return {
-      cloudDisplay: '—',
-      cloudBaseAglFt: null,
-      cloudBaseAmslFt: null,
-      cloudStatusFt: null,
-      cloudIsVerticalVisibility: false,
-      cloudRawLayers: [],
-      cloudSelectedLayer: null
-    };
-  }
-
-  return {
-    cloudDisplay: `${Math.round(amslFt)}`,
-    cloudBaseAglFt: null,
-    cloudBaseAmslFt: amslFt,
-    cloudStatusFt: amslFt,
-    cloudIsVerticalVisibility: false,
-    cloudRawLayers: [],
-    cloudSelectedLayer: null
-  };
-}
-
 function cloudStatus(sample) {
+  const cloudState = String(sample?.cloudState || '').trim().toLowerCase();
+  if (cloudState === 'nil') return 'good';
+  if (cloudState === 'unknown') return 'unknown';
+
   const text = String(sample?.cloudDisplay || '').trim().toUpperCase();
   if (['CAVOK', 'NSC', 'NIL'].includes(text)) return 'good';
 
@@ -205,6 +374,7 @@ function cloudStatus(sample) {
 }
 
 function visibilityStatus(sample) {
+  if (sample?.cavokReported) return 'good';
   const visibilityKm = Number.isFinite(sample?.visibilityKm) ? sample.visibilityKm : null;
   if (!Number.isFinite(visibilityKm)) return null;
   if (visibilityKm > 20) return 'good';
@@ -215,7 +385,7 @@ function visibilityStatus(sample) {
 
 function parseVisibilityKm(raw, fallbackVisib) {
   const tokens = String(raw || '').split(/\s+/);
-  if (tokens.includes('CAVOK')) return { km: 10, text: 'CAVOK' };
+  if (tokens.includes('CAVOK')) return { km: 10, text: '≥10 KM' };
 
   const metric = tokens.find(token => /^\d{4}$/.test(token));
   if (metric) {
@@ -317,44 +487,35 @@ async function fetchJsonWithRetry(url, cache) {
   return promise;
 }
 
-async function fetchMetars(icaoCodes, cache) {
+async function fetchMetars(icaoCodes) {
   if (!icaoCodes.length) return new Map();
-  const directUrl = buildMetarUrl(icaoCodes);
-  const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(directUrl)}`;
-
+  const url = buildMetarUrl(icaoCodes);
   try {
-    const payload = await fetchJsonWithRetry(directUrl, cache);
-    return normalizeMetar(payload);
+    const response = await fetch(url);
+    if (!response.ok) return new Map();
+    const rawText = await response.text();
+    return normalizeMetar({ bulkText: rawText });
   } catch {
-    try {
-      const payload = await fetchJsonWithRetry(proxyUrl, cache);
-      return normalizeMetar(payload);
-    } catch {
-      // METAR is an enhancement; if unavailable we fall back to forecast samples.
-      return new Map();
-    }
+    // METAR is an enhancement; continue with model fallback.
+    return new Map();
   }
 }
 
-async function fetchTafs(icaoCodes, cache) {
+async function fetchTafs(icaoCodes) {
   if (!icaoCodes.length) return new Map();
-  const directUrl = buildTafUrl(icaoCodes);
-  const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(directUrl)}`;
-
+  const url = buildTafUrl(icaoCodes);
   try {
-    const payload = await fetchJsonWithRetry(directUrl, cache);
-    return normalizeTaf(payload);
+    const response = await fetch(url);
+    if (!response.ok) return new Map();
+    const rawText = await response.text();
+    return normalizeTaf({ bulkText: rawText });
   } catch {
-    try {
-      const payload = await fetchJsonWithRetry(proxyUrl, cache);
-      return normalizeTaf(payload);
-    } catch {
-      return new Map();
-    }
+    // TAF is optional; continue with model fallback.
+    return new Map();
   }
 }
 
-function selectTafForecastGroup(taf, forecastIso) {
+function selectTafForecastGroup(taf, forecastIso, { requireCoverage = false } = {}) {
   const target = new Date(forecastIso).getTime() / 1000;
   const groups = Array.isArray(taf?.fcsts) ? taf.fcsts : [];
   if (!groups.length) return null;
@@ -367,8 +528,9 @@ function selectTafForecastGroup(taf, forecastIso) {
   }));
 
   const matching = withBounds.filter(entry => Number.isFinite(target) && Number.isFinite(entry.start) && Number.isFinite(entry.end) && target >= entry.start && target < entry.end);
+  if (requireCoverage && !matching.length) return null;
   const pool = matching.length ? matching : withBounds;
-  const precedence = { TEMPO: 0, FM: 1, BECMG: 2, null: 3, undefined: 3 };
+  const precedence = { TEMPO: 0, PROB30: 1, PROB40: 1, FM: 2, BECMG: 3, null: 4, undefined: 4 };
 
   return pool.sort((a, b) => {
     const aType = String(a.group?.fcstChange || '').toUpperCase() || null;
@@ -392,26 +554,109 @@ function findNearestReportingAirport(point, reportingAirports) {
   return nearest || null;
 }
 
-function buildAviationWeatherForAirport(airport, forecastIso, metarsByCode, tafsByCode) {
+function nearestAirportWithAviationWeather(point, etaIso, reportingAirports, metarsByCode, tafsByCode, maxDistanceNm = 120) {
+  if (!Array.isArray(reportingAirports) || !reportingAirports.length) return null;
+  const sorted = reportingAirports
+    .map(airport => ({ airport, distanceNm: distanceNm(point, airport) }))
+    .sort((a, b) => a.distanceNm - b.distanceNm);
+
+  for (const candidate of sorted) {
+    if (!Number.isFinite(candidate.distanceNm) || candidate.distanceNm > maxDistanceNm) break;
+    const selected = buildAviationWeatherForAirport(candidate.airport, etaIso, metarsByCode, tafsByCode);
+    if (selected) return { ...candidate, selected };
+  }
+
+  return null;
+}
+
+function parseIsoTimeMs(value) {
+  const time = new Date(value).getTime();
+  return Number.isFinite(time) ? time : null;
+}
+
+function metarAgeMinutes(metar, nowMs) {
+  const reportMs = parseIsoTimeMs(metar?.reportTime);
+  if (!Number.isFinite(reportMs)) return null;
+  return (nowMs - reportMs) / 60000;
+}
+
+function hasRecentMetar(metar, nowMs, maxAgeMinutes = 90) {
+  const ageMinutes = metarAgeMinutes(metar, nowMs);
+  return Number.isFinite(ageMinutes) && ageMinutes >= 0 && ageMinutes <= maxAgeMinutes;
+}
+
+function isEtaWithinMinutes(etaIso, nowMs, maxMinutes) {
+  const etaMs = parseIsoTimeMs(etaIso);
+  if (!Number.isFinite(etaMs)) return false;
+  const deltaMinutes = (etaMs - nowMs) / 60000;
+  return deltaMinutes >= 0 && deltaMinutes <= maxMinutes;
+}
+
+function pointEtaIsoByIndex(routeReferences, departureIso, cruiseSpeedKt) {
+  const etaByIndex = new Map();
+  const startMs = parseIsoTimeMs(departureIso);
+  if (!Number.isFinite(startMs)) return etaByIndex;
+
+  const speedKt = Number.isFinite(cruiseSpeedKt) && cruiseSpeedKt > 0 ? cruiseSpeedKt : 110;
+  let cumulativeNm = 0;
+
+  routeReferences.forEach((point, index) => {
+    if (index > 0) cumulativeNm += distanceNm(routeReferences[index - 1], point);
+    const etaMs = startMs + (cumulativeNm / speedKt) * 3600000;
+    etaByIndex.set(index, new Date(etaMs).toISOString());
+  });
+
+  return etaByIndex;
+}
+
+function terrainClearanceWorkflowPlaceholder(sample) {
+  return {
+    cloudBaseAmslFt: sample?.cloudBaseAmslFt ?? null,
+    terrainWithin5NmFt: null,
+    terrainClearanceFt: null,
+    clearanceBand: null
+  };
+}
+
+function buildAviationWeatherForAirport(airport, etaIso, metarsByCode, tafsByCode) {
   const code = String(airport?.code || '').toUpperCase();
   if (!code) return null;
 
+  const nowMs = Date.now();
   const metar = metarsByCode.get(code);
-  if (metar) {
-    return { source: 'METAR', weather: buildMetarAirportWeather(metar, airport), rawReport: metar.rawOb || '', tafGroup: null };
-  }
 
   const taf = tafsByCode.get(code);
   if (taf) {
-    const tafWeather = buildTafAirportWeather(taf, airport, forecastIso);
+    const tafWeather = buildTafAirportWeather(taf, airport, etaIso, { requireCoverage: true });
     if (tafWeather) {
       return {
         source: 'TAF',
+        reason: 'TAF group covers waypoint ETA.',
         weather: tafWeather,
         rawReport: taf.rawTAF || '',
         tafGroup: tafWeather.tafGroup || null
       };
     }
+  }
+
+  if (metar && hasRecentMetar(metar, nowMs, 90) && isEtaWithinMinutes(etaIso, nowMs, 30)) {
+    return {
+      source: 'METAR',
+      reason: 'METAR is 90 minutes old or newer and ETA is within 30 minutes.',
+      weather: buildMetarAirportWeather(metar, airport),
+      rawReport: metar.rawOb || '',
+      tafGroup: null
+    };
+  }
+
+  if (metar && hasRecentMetar(metar, nowMs, 90)) {
+    return {
+      source: 'METAR',
+      reason: 'No valid ETA-covering TAF group; using METAR that is 90 minutes old or newer.',
+      weather: buildMetarAirportWeather(metar, airport),
+      rawReport: metar.rawOb || '',
+      tafGroup: null
+    };
   }
 
   return null;
@@ -420,7 +665,10 @@ function buildAviationWeatherForAirport(airport, forecastIso, metarsByCode, tafs
 function buildMetarAirportWeather(metar, point) {
   const terrainElevationFt = Number.isFinite(point.elevationFt) ? point.elevationFt : null;
   const cloud = parseCloudInfo(metar);
-  const visibility = parseVisibilityKm(metar.rawOb, metar.visib);
+  const cavokReported = cloud.display === 'CAVOK' || /(?:^|\s)CAVOK(?:\s|$)/.test(String(metar.rawOb || '').toUpperCase());
+  const visibility = cavokReported
+    ? { km: 10, text: '≥10 KM' }
+    : parseVisibilityKm(metar.rawOb, metar.visib);
   const wind = parseWindToken(metar.rawOb);
   const cloudState = buildAirportCloudState(cloud, terrainElevationFt);
 
@@ -440,17 +688,21 @@ function buildMetarAirportWeather(metar, point) {
     metarDewPointC: Number.isFinite(metar.dewp) ? metar.dewp : null,
     metarQnhHpa: Number.isFinite(metar.altim) ? Math.round(metar.altim) : null,
     metarObsTime: parseMetarTime(metar.rawOb, metar.reportTime),
-    metarRaw: metar.rawOb || ''
+    metarRaw: metar.rawOb || '',
+    cavokReported
   };
 }
 
-function buildTafAirportWeather(taf, point, forecastIso) {
+function buildTafAirportWeather(taf, point, forecastIso, options = {}) {
   const terrainElevationFt = Number.isFinite(point.elevationFt) ? point.elevationFt : null;
-  const selected = selectTafForecastGroup(taf, forecastIso);
+  const selected = selectTafForecastGroup(taf, forecastIso, options);
   if (!selected?.group) return null;
 
   const cloud = parseTafCloudInfo(selected.group.clouds, taf.rawTAF || '');
-  const visibility = parseVisibilityKm(null, selected.group.visib);
+  const cavokReported = cloud.display === 'CAVOK';
+  const visibility = cavokReported
+    ? { km: 10, text: '≥10 KM' }
+    : parseVisibilityKm(null, selected.group.visib);
   const cloudState = buildAirportCloudState(cloud, terrainElevationFt);
 
   return {
@@ -470,7 +722,8 @@ function buildTafAirportWeather(taf, point, forecastIso) {
     metarDewPointC: null,
     metarQnhHpa: Number.isFinite(selected.group.altim) ? Math.round(selected.group.altim) : null,
     metarObsTime: null,
-    metarRaw: taf.rawTAF || ''
+    metarRaw: taf.rawTAF || '',
+    cavokReported
   };
 }
 
@@ -517,15 +770,46 @@ function normaliseBatchResponse(payload) {
 
 function extractHourlySample(data, forecastIso) {
   const i = nearestIndex(data.hourly.time, forecastIso);
-  return {
+  const sample = {
     forecastTime: data.hourly.time[i],
-    amslFt: estimateCloudBaseFt(data.hourly.temperature_2m[i], data.hourly.dew_point_2m[i]),
+    temperature2mC: data.hourly.temperature_2m[i],
+    dewPoint2mC: data.hourly.dew_point_2m[i],
+    cloudCoverTotalPercent: percentOrNull(data.hourly.cloud_cover[i]),
+    cloudCoverLowPercent: percentOrNull(data.hourly.cloud_cover_low[i]),
+    cloudCoverMidPercent: percentOrNull(data.hourly.cloud_cover_mid[i]),
+    cloudCoverHighPercent: percentOrNull(data.hourly.cloud_cover_high[i]),
     visibilityKm: visibilityKm(data.hourly.visibility[i]),
     precipitationMm: data.hourly.precipitation[i],
     weatherCode: data.hourly.weather_code[i],
     windKt: Math.round(data.hourly.wind_speed_10m[i] ?? 0),
     windDirection: Math.round(data.hourly.wind_direction_10m[i] ?? 0),
     gustKt: Math.round(data.hourly.wind_gusts_10m[i] ?? 0)
+  };
+
+  PRESSURE_LEVELS.forEach(level => {
+    sample[`relative_humidity_${level}hPa`] = data.hourly[`relative_humidity_${level}hPa`]?.[i] ?? null;
+    sample[`cloud_cover_${level}hPa`] = data.hourly[`cloud_cover_${level}hPa`]?.[i] ?? null;
+    sample[`geopotential_height_${level}hPa`] = data.hourly[`geopotential_height_${level}hPa`]?.[i] ?? null;
+  });
+
+  const modelCloud = classifyModelCloud(sample);
+  const pressureLevels = buildPressureLevels(sample);
+  return {
+    ...sample,
+    amslFt: modelCloud.cloudBaseAmslFt,
+    cloudDisplay: modelCloud.cloudDisplay,
+    cloudBaseAglFt: modelCloud.cloudBaseAglFt,
+    cloudBaseAmslFt: modelCloud.cloudBaseAmslFt,
+    cloudState: modelCloud.cloudState,
+    cloudMethod: modelCloud.cloudMethod,
+    cloudStatusFt: modelCloud.cloudStatusFt,
+    cloudIsVerticalVisibility: modelCloud.cloudIsVerticalVisibility,
+    cloudRawLayers: modelCloud.cloudRawLayers,
+    cloudSelectedLayer: modelCloud.cloudSelectedLayer,
+    cloudCoverLowPercent: modelCloud.cloudCoverLowPercent,
+    cloudCoverMidPercent: modelCloud.cloudCoverMidPercent,
+    cloudCoverHighPercent: modelCloud.cloudCoverHighPercent,
+    pressureLevels
   };
 }
 
@@ -567,17 +851,20 @@ export function weatherStatus(sample) {
   return statuses.sort((a, b) => ranks[b] - ranks[a])[0];
 }
 
-export async function fetchRouteWeather(routeReferences, forecastIso) {
+export async function fetchRouteWeather(routeReferences, forecastIso, options = {}) {
   const requestCache = new Map();
   const weatherByIndex = new Map();
+  const departureIso = options.departureIso || forecastIso;
+  const cruiseSpeedKt = Number.isFinite(Number(options.cruiseSpeedKt)) ? Number(options.cruiseSpeedKt) : 110;
+  const etaByIndex = pointEtaIsoByIndex(routeReferences, departureIso, cruiseSpeedKt);
 
   const airportCatalog = locations
     .filter(isEligibleReportingAirport)
     .map(airport => ({ ...airport, code: String(airport.code).toUpperCase() }));
   const airportByCode = new Map(airportCatalog.map(airport => [airport.code, airport]));
   const airportCodes = [...new Set(airportCatalog.map(airport => airport.code))];
-  const metarsByCode = await fetchMetars(airportCodes, requestCache);
-  const tafsByCode = await fetchTafs(airportCodes, requestCache);
+  const metarsByCode = AIRPORT_REPORT_LOOKUPS_ENABLED ? await fetchMetars(airportCodes) : new Map();
+  const tafsByCode = AIRPORT_REPORT_LOOKUPS_ENABLED ? await fetchTafs(airportCodes) : new Map();
 
   const logSourceSelection = ({ point, nearest, source, reason }) => {
     console.info('[Takeoff source selection]', {
@@ -604,15 +891,32 @@ export async function fetchRouteWeather(routeReferences, forecastIso) {
         return;
       }
 
-      const selected = buildAviationWeatherForAirport(ownAirport, forecastIso, metarsByCode, tafsByCode);
+      const pointEtaIso = etaByIndex.get(index) || forecastIso;
+      const selected = buildAviationWeatherForAirport(ownAirport, pointEtaIso, metarsByCode, tafsByCode);
       if (!selected) {
-        logSourceSelection({ point, nearest, source: 'Forecast', reason: 'No METAR or valid TAF available for user-entered airport.' });
+        const nearby = nearestAirportWithAviationWeather(point, pointEtaIso, airportCatalog.filter(airport => airport.code !== ownCode), metarsByCode, tafsByCode);
+        if (!nearby) {
+          logSourceSelection({ point, nearest, source: 'Forecast', reason: 'No METAR or valid TAF available for user-entered airport.' });
+          return;
+        }
+
+        weatherByIndex.set(index, {
+          ...nearby.selected.weather,
+          source: nearby.selected.source,
+          sourceReason: `No valid report at ${ownAirport.code}; using nearest reporting airport ${nearby.airport.code} (${nearby.distanceNm.toFixed(1)} NM). ${nearby.selected.reason}`,
+          reportingAirportIcao: nearby.airport.code,
+          reportingAirportDistanceNm: nearby.distanceNm,
+          sourceLabel: `${nearby.selected.source} ${nearby.airport.code}`
+        });
+
+        logSourceSelection({ point, nearest: nearby, source: nearby.selected.source, reason: null });
         return;
       }
 
       weatherByIndex.set(index, {
         ...selected.weather,
         source: selected.source,
+        sourceReason: selected.reason,
         reportingAirportIcao: ownAirport.code,
         reportingAirportDistanceNm: 0,
         sourceLabel: `${selected.source} ${ownAirport.code}`
@@ -650,7 +954,8 @@ export async function fetchRouteWeather(routeReferences, forecastIso) {
       return;
     }
 
-    const selected = buildAviationWeatherForAirport(nearest.airport, forecastIso, metarsByCode, tafsByCode);
+    const pointEtaIso = etaByIndex.get(index) || forecastIso;
+    const selected = buildAviationWeatherForAirport(nearest.airport, pointEtaIso, metarsByCode, tafsByCode);
     if (!selected) {
       logSourceSelection({ point, nearest, source: 'Forecast', reason: 'Nearest reporting airport has no METAR and no valid TAF group.' });
       return;
@@ -659,6 +964,7 @@ export async function fetchRouteWeather(routeReferences, forecastIso) {
     weatherByIndex.set(index, {
       ...selected.weather,
       source: selected.source,
+        sourceReason: selected.reason,
       reportingAirportIcao: nearest.airport.code,
       reportingAirportDistanceNm: nearest.distanceNm,
       sourceLabel: `${selected.source} ${nearest.airport.code}`
@@ -680,9 +986,22 @@ export async function fetchRouteWeather(routeReferences, forecastIso) {
       const weather = representativeWeather.get(representatives[representativeIndexByPoint[forecastIndex]]);
       weatherByIndex.set(entry.index, {
         source: 'Forecast',
-        sourceLabel: 'Forecast',
+        sourceReason: 'No valid TAF or recent METAR was available for this point; using model forecast.',
+        sourceLabel: 'Model',
         forecastTime: weather.forecastTime,
-        ...buildForecastCloudState(weather.amslFt),
+        cloudDisplay: weather.cloudDisplay,
+        cloudBaseAglFt: weather.cloudBaseAglFt,
+        cloudBaseAmslFt: weather.cloudBaseAmslFt,
+        cloudState: weather.cloudState,
+        cloudMethod: weather.cloudMethod,
+        cloudStatusFt: weather.cloudStatusFt,
+        cloudIsVerticalVisibility: weather.cloudIsVerticalVisibility,
+        cloudRawLayers: weather.cloudRawLayers,
+        cloudSelectedLayer: weather.cloudSelectedLayer,
+        cloudCoverLowPercent: weather.cloudCoverLowPercent,
+        cloudCoverMidPercent: weather.cloudCoverMidPercent,
+        cloudCoverHighPercent: weather.cloudCoverHighPercent,
+        pressureLevels: weather.pressureLevels,
         visibilityKm: weather.visibilityKm,
         precipitationMm: weather.precipitationMm,
         weatherCode: weather.weatherCode,
@@ -702,6 +1021,7 @@ export async function fetchRouteWeather(routeReferences, forecastIso) {
       ...point,
       elevationFt: terrainElevationFt,
       source: weather.source,
+      sourceReason: weather.sourceReason || null,
       sourceLabel: weather.sourceLabel || weather.source,
       tafGroup: weather.tafGroup || null,
       reportingAirportIcao: weather.reportingAirportIcao || null,
@@ -710,10 +1030,16 @@ export async function fetchRouteWeather(routeReferences, forecastIso) {
       cloudDisplay: weather.cloudDisplay,
       cloudBaseAglFt: weather.source === 'Forecast' ? null : weather.cloudBaseAglFt,
       cloudBaseAmslFt: weather.cloudBaseAmslFt,
+      cloudState: weather.cloudState || null,
+      cloudMethod: weather.cloudMethod || null,
       cloudStatusFt: weather.cloudStatusFt,
       cloudIsVerticalVisibility: weather.cloudIsVerticalVisibility,
       cloudRawLayers: weather.cloudRawLayers || [],
       cloudSelectedLayer: weather.cloudSelectedLayer || null,
+      cloudCoverLowPercent: weather.cloudCoverLowPercent ?? null,
+      cloudCoverMidPercent: weather.cloudCoverMidPercent ?? null,
+      cloudCoverHighPercent: weather.cloudCoverHighPercent ?? null,
+      pressureLevels: Array.isArray(weather.pressureLevels) ? weather.pressureLevels : [],
       visibilityKm: weather.visibilityKm,
       visibilityText: weather.visibilityText,
       precipitationMm: weather.precipitationMm,
@@ -726,8 +1052,10 @@ export async function fetchRouteWeather(routeReferences, forecastIso) {
       metarDewPointC: weather.metarDewPointC,
       metarQnhHpa: weather.metarQnhHpa,
       metarObsTime: weather.metarObsTime,
-      metarRaw: weather.metarRaw
+      metarRaw: weather.metarRaw,
+      cavokReported: Boolean(weather.cavokReported)
     };
+    sample.terrainClearance = terrainClearanceWorkflowPlaceholder(sample);
     sample.status = weatherStatus(sample);
     return sample;
   });

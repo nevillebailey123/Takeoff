@@ -220,9 +220,12 @@ async function getBriefing() {
     const userRoute = buildUserRoute();
     const references = userRoute.length === 1 ? userRoute : buildRouteReferences(userRoute, 50);
     const forecastDate = selectedForecastDate();
-    const samples = await fetchRouteWeather(references, forecastDate.toISOString());
-    const distance = userRoute.length === 1 ? 0 : routeDistanceNm(userRoute);
     const speed = Math.max(40, Number(inputs.speed.value || 110));
+    const samples = await fetchRouteWeather(references, forecastDate.toISOString(), {
+      departureIso: forecastDate.toISOString(),
+      cruiseSpeedKt: speed
+    });
+    const distance = userRoute.length === 1 ? 0 : routeDistanceNm(userRoute);
     const etaMinutes = distance / speed * 60;
 
     briefingPanel.hidden = false;
