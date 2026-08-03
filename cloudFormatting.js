@@ -18,6 +18,7 @@ function roundedAglFromAmsl(amslFt, elevationFt) {
 function buildCloudPresentation(sample) {
   const cloudText = normalizeCloudText(sample?.cloudDisplay);
   const amslFt = roundedAmsl(sample);
+  const aviationSource = sample?.source === 'TAF' || sample?.source === 'METAR';
 
   if (cloudText === 'CAVOK' || cloudText === 'NSC') {
     return {
@@ -36,6 +37,17 @@ function buildCloudPresentation(sample) {
       cloudText: 'NIL',
       amslFt: null,
       aglFt: null,
+      terrainFt: null,
+      clearanceFt: null
+    };
+  }
+
+  if (aviationSource && Number.isFinite(sample?.cloudBaseAglFt)) {
+    return {
+      kind: 'aviation-agl',
+      cloudText: null,
+      amslFt,
+      aglFt: Math.round(sample.cloudBaseAglFt),
       terrainFt: null,
       clearanceFt: null
     };
@@ -79,11 +91,16 @@ export function formatCloud(sample, { surface = 'card' } = {}) {
   const presentation = buildCloudPresentation(sample);
 
   if (surface === 'banner') {
+    if (presentation.kind === 'aviation-agl' && Number.isFinite(presentation.aglFt)) {
+      return `${presentation.aglFt} ft`;
+    }
     return Number.isFinite(presentation.amslFt) ? `${presentation.amslFt} ft` : null;
   }
 
   let value;
-  if (presentation.kind === 'numeric') {
+  if (presentation.kind === 'aviation-agl') {
+    value = `${presentation.aglFt} AGL`;
+  } else if (presentation.kind === 'numeric') {
     value = Number.isFinite(presentation.aglFt)
       ? `${presentation.amslFt} (${presentation.aglFt} AGL)`
       : `${presentation.amslFt}`;

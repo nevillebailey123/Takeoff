@@ -29,6 +29,335 @@ const AIRPORT_REPORT_LOOKUPS_ENABLED = true;
 const LOW_LEVEL_MAX_METERS = 3000;
 const FT_PER_METER = 3.28084;
 const MOIST_WEATHER_CODES = new Set([45, 48, 51, 53, 55, 56, 57, 61, 63, 65, 66, 67, 71, 73, 75, 77, 80, 81, 82, 85, 86]);
+const FOG_MIST_WEATHER_CODES = new Set([45, 48]);
+const MODEL_PLAUSIBILITY_DIAGNOSTICS_ENABLED = true;
+const MODEL_COMPARISON_DIAGNOSTICS_ENABLED = true;
+const MODEL_COMPARISON_MODELS = [
+  { label: 'Open-Meteo Best Match', model: null },
+  { label: 'ECMWF IFS', model: 'ecmwf_ifs' },
+  { label: 'GFS', model: 'gfs_seamless' }
+];
+const MODEL_COMPARISON_TEST_CODES = ['NZTU', 'NZCH', 'NZNR', 'NZPM', 'NZKI', 'ARTHURS_PASS', 'NZNS'];
+
+function formatIsoUtc(iso) {
+  const date = new Date(iso);
+  if (!Number.isFinite(date.getTime())) return null;
+  return date.toISOString();
+}
+
+function formatIsoNzt(iso) {
+  const date = new Date(iso);
+  if (!Number.isFinite(date.getTime())) return null;
+  return new Intl.DateTimeFormat('en-NZ', {
+    timeZone: 'Pacific/Auckland',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false
+  }).format(date);
+}
+
+function timestampSecondsToIso(value) {
+  return Number.isFinite(value) ? new Date(value * 1000).toISOString() : null;
+}
+
+function resolveUtcDayHour(anchorIso, day, hour, minute = 0) {
+  const anchor = new Date(anchorIso || Date.now());
+  if (!Number.isFinite(anchor.getTime()) || !Number.isFinite(day) || !Number.isFinite(hour) || !Number.isFinite(minute)) return null;
+  const candidate = new Date(Date.UTC(anchor.getUTCFullYear(), anchor.getUTCMonth(), day, hour, minute, 0, 0));
+  if (candidate.getUTCDate() < anchor.getUTCDate() - 10) candidate.setUTCMonth(candidate.getUTCMonth() + 1);
+  if (candidate.getUTCDate() > anchor.getUTCDate() + 20) candidate.setUTCMonth(candidate.getUTCMonth() - 1);
+  return candidate.toISOString();
+}
+
+function parseTafWindowToken(windowToken, anchorIso) {
+  const match = String(windowToken || '').match(/^(\d{2})(\d{2})\/(\d{2})(\d{2})$/);
+  if (!match) return { startIso: null, endIso: null };
+  const startIso = resolveUtcDayHour(anchorIso, Number(match[1]), Number(match[2]), 0);
+  let endIso = resolveUtcDayHour(anchorIso, Number(match[3]), Number(match[4]), 0);
+  if (startIso && endIso && new Date(endIso).getTime() <= new Date(startIso).getTime()) {
+    const shifted = new Date(endIso);
+    shifted.setUTCDate(shifted.getUTCDate() + 1);
+    endIso = shifted.toISOString();
+  }
+  return { startIso, endIso };
+}
+
+function parseTafWeatherTokens(tokens) {
+  const blocked = new Set(['TAF', 'AMD', 'COR', 'NIL', 'CNL', 'TEMPO', 'BECMG', 'NOSIG', 'CAVOK', 'NSC', 'NCD', 'SKC', 'CLR', 'PROB30', 'PROB40']);
+  return tokens
+    .map(token => String(token || '').trim().toUpperCase())
+    .filter(Boolean)
+    .filter(token => /^(-|\+|VC)?[A-Z]{2,}$/.test(token))
+    .filter(token => !blocked.has(token))
+    .filter(token => !/^(FEW|SCT|BKN|OVC|VV)\d{3}(CB|TCU)?$/.test(token))
+    .filter(token => !/^(\d{3}|VRB)\d{2,3}(G\d{2,3})?KT$/.test(token))
+    .filter(token => !/^(\d{4}|\d+(?:\/\d+)?SM)$/.test(token));
+}
+
+function parseTafGroupsFromRaw(rawTaf, issueIso, validityStartIso, validityEndIso) {
+  const compact = String(rawTaf || '').replace(/\s+/g, ' ').trim();
+  const empty = {
+    groups: [],
+    issueToken: null,
+    validityToken: null,
+    amendmentType: null,
+    status: {
+      amd: false,
+      cor: false,
+      nil: false,
+      cnl: false
+    }
+  };
+  if (!compact.startsWith('TAF ')) return empty;
+
+  const tokens = compact.split(' ');
+  let cursor = 1;
+  let amendmentType = null;
+  if (tokens[cursor] === 'AMD' || tokens[cursor] === 'COR') {
+    amendmentType = tokens[cursor];
+    cursor += 1;
+  }
+
+  if (!/^[A-Z]{4}$/.test(String(tokens[cursor] || ''))) return empty;
+  cursor += 1;
+
+  const issueToken = tokens[cursor] || null;
+  cursor += 1;
+  const validityToken = tokens[cursor] || null;
+  cursor += 1;
+
+  const body = tokens.slice(cursor);
+  const markers = token => /^(FM\d{6}|BECMG|TEMPO|PROB30|PROB40)$/.test(token);
+  const groups = [];
+  let index = 0;
+  let initialTokens = [];
+
+  while (index < body.length && !markers(body[index])) {
+    initialTokens.push(body[index]);
+    index += 1;
+  }
+
+  groups.push({
+    type: 'INITIAL',
+    marker: null,
+    windowToken: validityToken,
+    tokens: initialTokens,
+    rawText: initialTokens.join(' ').trim()
+  });
+
+  while (index < body.length) {
+    const marker = body[index];
+    if (!markers(marker)) {
+      index += 1;
+      continue;
+    }
+
+    if (/^FM\d{6}$/.test(marker)) {
+      index += 1;
+      const conditionTokens = [];
+      while (index < body.length && !markers(body[index])) {
+        conditionTokens.push(body[index]);
+        index += 1;
+      }
+      groups.push({
+        type: 'FM',
+        marker,
+        windowToken: null,
+        tokens: conditionTokens,
+        rawText: [marker, ...conditionTokens].join(' ').trim()
+      });
+      continue;
+    }
+
+    if (marker === 'BECMG' || marker === 'TEMPO') {
+      const windowToken = body[index + 1] || null;
+      index += 2;
+      const conditionTokens = [];
+      while (index < body.length && !markers(body[index])) {
+        conditionTokens.push(body[index]);
+        index += 1;
+      }
+      groups.push({
+        type: marker,
+        marker,
+        windowToken,
+        tokens: conditionTokens,
+        rawText: [marker, windowToken, ...conditionTokens].join(' ').trim()
+      });
+      continue;
+    }
+
+    if (marker === 'PROB30' || marker === 'PROB40') {
+      let offset = 1;
+      let type = marker;
+      if (body[index + 1] === 'TEMPO') {
+        type = `${marker}_TEMPO`;
+        offset = 2;
+      }
+      const windowToken = body[index + offset] || null;
+      index += offset + 1;
+      const conditionTokens = [];
+      while (index < body.length && !markers(body[index])) {
+        conditionTokens.push(body[index]);
+        index += 1;
+      }
+      const rawPrefix = type.endsWith('_TEMPO') ? [marker, 'TEMPO'] : [marker];
+      groups.push({
+        type,
+        marker,
+        windowToken,
+        tokens: conditionTokens,
+        rawText: [...rawPrefix, windowToken, ...conditionTokens].join(' ').trim()
+      });
+      continue;
+    }
+
+    index += 1;
+  }
+
+  const fmStarts = groups
+    .map((group, groupIndex) => {
+      if (!group.marker || !/^FM\d{6}$/.test(group.marker)) return null;
+      const fmMatch = group.marker.match(/^FM(\d{2})(\d{2})(\d{2})$/);
+      if (!fmMatch) return null;
+      const startIso = resolveUtcDayHour(issueIso, Number(fmMatch[1]), Number(fmMatch[2]), Number(fmMatch[3]));
+      return { groupIndex, startIso };
+    })
+    .filter(Boolean)
+    .sort((a, b) => new Date(a.startIso).getTime() - new Date(b.startIso).getTime());
+
+  const groupsWithWindow = groups.map((group, groupIndex) => {
+    let startIso = null;
+    let endIso = null;
+
+    if (group.type === 'INITIAL') {
+      startIso = validityStartIso || null;
+      endIso = validityEndIso || null;
+    } else if (group.type === 'FM') {
+      const currentFm = fmStarts.find(entry => entry.groupIndex === groupIndex);
+      const nextFm = fmStarts.find(entry => entry.groupIndex > groupIndex);
+      startIso = currentFm?.startIso || null;
+      endIso = nextFm?.startIso || validityEndIso || null;
+    } else {
+      const window = parseTafWindowToken(group.windowToken, issueIso);
+      startIso = window.startIso;
+      endIso = window.endIso;
+    }
+
+    const wind = parseWindToken(group.tokens.join(' '));
+    const visibilityToken = group.tokens.find(token => token === 'CAVOK' || /^\d{4}$/.test(token) || /^\d+(?:\/\d+)?SM$/.test(token)) || null;
+    const cloudTokens = group.tokens.filter(token => /^(FEW|SCT|BKN|OVC|VV)\d{3}(CB|TCU)?$/.test(token));
+    const weatherTokens = parseTafWeatherTokens(group.tokens);
+
+    return {
+      index: groupIndex,
+      type: group.type,
+      startIso,
+      endIso,
+      wind: wind.text,
+      visibility: visibilityToken,
+      weather: weatherTokens,
+      cloud: cloudTokens,
+      rawText: group.rawText
+    };
+  });
+
+  return {
+    groups: groupsWithWindow,
+    issueToken,
+    validityToken,
+    amendmentType,
+    status: {
+      amd: amendmentType === 'AMD',
+      cor: amendmentType === 'COR',
+      nil: /\bNIL\b/.test(compact),
+      cnl: /\bCNL\b/.test(compact)
+    }
+  };
+}
+
+function buildTafSelectionDiagnostics(taf, forecastIso, options = {}) {
+  const target = new Date(forecastIso).getTime() / 1000;
+  const requireCoverage = Boolean(options.requireCoverage);
+  const groups = Array.isArray(taf?.fcsts) ? taf.fcsts : [];
+  const withBounds = groups.map((group, index) => ({
+    group,
+    index,
+    start: Number(group?.timeFrom),
+    end: Number(group?.timeTo)
+  }));
+  const matching = withBounds.filter(entry => Number.isFinite(target) && Number.isFinite(entry.start) && Number.isFinite(entry.end) && target >= entry.start && target < entry.end);
+  const pool = matching.length ? matching : withBounds;
+  const precedence = { TEMPO: 0, PROB30: 1, PROB40: 1, FM: 2, BECMG: 3, null: 4, undefined: 4 };
+
+  const sortedPool = [...pool].sort((a, b) => {
+    const aType = String(a.group?.fcstChange || '').toUpperCase() || null;
+    const bType = String(b.group?.fcstChange || '').toUpperCase() || null;
+    const aPriority = precedence[aType] ?? 4;
+    const bPriority = precedence[bType] ?? 4;
+    if (aPriority !== bPriority) return aPriority - bPriority;
+
+    const aSpan = Number.isFinite(a.start) && Number.isFinite(a.end) ? a.end - a.start : Number.POSITIVE_INFINITY;
+    const bSpan = Number.isFinite(b.start) && Number.isFinite(b.end) ? b.end - b.start : Number.POSITIVE_INFINITY;
+    if (aSpan !== bSpan) return aSpan - bSpan;
+    return a.index - b.index;
+  });
+
+  const selected = sortedPool[0] || null;
+  const rejected = withBounds
+    .filter(entry => !selected || entry.index !== selected.index)
+    .map(entry => {
+      const coversEta = Number.isFinite(target) && Number.isFinite(entry.start) && Number.isFinite(entry.end)
+        ? target >= entry.start && target < entry.end
+        : false;
+      let reason = 'Lower precedence than selected group.';
+      if (requireCoverage && !matching.length) reason = 'Rejected because requireCoverage=true and no groups covered ETA.';
+      else if (!coversEta && matching.length) reason = 'Rejected because group does not cover ETA while another group does.';
+      return {
+        index: entry.index,
+        type: String(entry.group?.fcstChange || '').toUpperCase() || 'PREVAILING',
+        startIso: timestampSecondsToIso(entry.start),
+        endIso: timestampSecondsToIso(entry.end),
+        reason
+      };
+    });
+
+  return {
+    targetIso: formatIsoUtc(forecastIso),
+    requireCoverage,
+    selectedIndex: selected?.index ?? null,
+    selectedType: String(selected?.group?.fcstChange || '').toUpperCase() || (selected ? 'PREVAILING' : null),
+    selectedStartIso: timestampSecondsToIso(selected?.start),
+    selectedEndIso: timestampSecondsToIso(selected?.end),
+    matchingIndexes: matching.map(entry => entry.index),
+    rejected
+  };
+}
+
+function buildTafFieldConsistency(sample, point, selectedAirportIcao) {
+  const sourceGroupLabel = `TAF ${selectedAirportIcao} ${sample?.tafGroup || 'PREVAILING'}`;
+  const origins = {
+    cloud: sourceGroupLabel,
+    visibility: sourceGroupLabel,
+    wind: sourceGroupLabel,
+    weather: sourceGroupLabel,
+    rain: 'Derived constant (TAF path sets precipitation to NIL)',
+    sourceLabel: 'Source selection label'
+  };
+
+  const operationalOrigins = [origins.cloud, origins.visibility, origins.wind, origins.weather];
+  const mixedSourcesDetected = operationalOrigins.some(origin => origin !== operationalOrigins[0]);
+
+  return {
+    origins,
+    mixedSourcesDetected,
+    fallbackAirportUsed: String(point?.code || '').toUpperCase() !== String(selectedAirportIcao || '').toUpperCase()
+  };
+}
 
 function nearestIndex(times, targetIso) {
   const target = new Date(targetIso).getTime();
@@ -212,6 +541,461 @@ function classifyModelCloud(sample) {
   };
 }
 
+function pressureLevelsForLowCloud(sample) {
+  return Array.isArray(sample?.pressureLevels)
+    ? sample.pressureLevels.filter(level => Number.isFinite(level?.heightMeters) && level.heightMeters <= LOW_LEVEL_MAX_METERS)
+    : [];
+}
+
+function adjacentPairCount(levels, condition) {
+  let count = 0;
+  for (let index = 0; index < levels.length - 1; index += 1) {
+    if (condition(levels[index], levels[index + 1])) count += 1;
+  }
+  return count;
+}
+
+function lowCloudEvidenceForSample(sample) {
+  const levels = pressureLevelsForLowCloud(sample);
+  const cloudCoverLow = Number(sample?.cloudCoverLowPercent);
+  const precipitation = Number(sample?.precipitationMm);
+  const cloudCoverStrong = Number.isFinite(cloudCoverLow) && cloudCoverLow >= 60;
+  const adjacentCloudPairs = adjacentPairCount(levels, (a, b) => Number(a?.cloudCoverPercent) >= 50 && Number(b?.cloudCoverPercent) >= 50);
+  const adjacentRhPairs90 = adjacentPairCount(levels, (a, b) => Number(a?.relativeHumidityPercent) >= 90 && Number(b?.relativeHumidityPercent) >= 90);
+  const humidityWithNeighbor = adjacentPairCount(levels, (a, b) => {
+    const aRh = Number(a?.relativeHumidityPercent);
+    const bRh = Number(b?.relativeHumidityPercent);
+    return (aRh >= 90 && bRh >= 85) || (bRh >= 90 && aRh >= 85);
+  });
+  const weatherSupport = weatherCodeSuggestsMoisture(sample?.weatherCode) || (Number.isFinite(precipitation) && precipitation > 0.1);
+
+  return {
+    lowLevelPressureCount: levels.length,
+    cloudCoverLow,
+    cloudCoverStrong,
+    adjacentCloudPairs,
+    adjacentRhPairs90,
+    humidityWithNeighbor,
+    weatherSupport,
+    strongIndicatorCount: [cloudCoverStrong, adjacentCloudPairs > 0, adjacentRhPairs90 > 0, weatherSupport].filter(Boolean).length,
+    anyIndicatorCount: [cloudCoverStrong, adjacentCloudPairs > 0, humidityWithNeighbor > 0, weatherSupport].filter(Boolean).length
+  };
+}
+
+function confidenceBandFromScore(score) {
+  const value = Number(score);
+  if (!Number.isFinite(value)) return 'LOW';
+  if (value >= 75) return 'HIGH';
+  if (value >= 45) return 'MEDIUM';
+  return 'LOW';
+}
+
+function modelVisibilityAbove20Km(context) {
+  const visibilityM = Number(context?.rawVisibilityM);
+  if (!Number.isFinite(visibilityM)) return false;
+  return visibilityM >= 20000;
+}
+
+function scoreCloudConfidence(sample, cloudConfidence, cloudOutlier) {
+  const evidence = cloudConfidence?.evidence || {};
+  const ticks = [];
+  const crosses = [];
+  let score = 20;
+
+  if (evidence.cloudCoverStrong) {
+    score += 18;
+    ticks.push(`Low cloud cover ${Math.round(evidence.cloudCoverLow || 0)}%`);
+  } else {
+    crosses.push('Low cloud cover not significant');
+  }
+
+  if (Number(evidence.adjacentCloudPairs) > 0) {
+    score += 18;
+    ticks.push('Pressure-level cloud on adjacent levels');
+  } else {
+    crosses.push('No adjacent pressure-level cloud support');
+  }
+
+  if (Number(evidence.adjacentRhPairs90) > 0 || Number(evidence.humidityWithNeighbor) > 0) {
+    score += 14;
+    ticks.push('RH profile supports low cloud');
+  } else {
+    crosses.push('RH profile weak for low cloud');
+  }
+
+  if (evidence.weatherSupport) {
+    score += 10;
+    ticks.push('Weather code or precipitation supports cloud');
+  } else {
+    crosses.push('No weather/precip support for cloud');
+  }
+
+  if (evidence.neighboringForecastHourSupport) {
+    score += 10;
+    ticks.push('Previous/next forecast hour agrees');
+  } else {
+    crosses.push('Neighboring forecast hours disagree');
+  }
+
+  if (evidence.neighboringRoutePointSupport) {
+    score += 10;
+    ticks.push('Neighboring route points agree');
+  } else {
+    crosses.push('Neighboring route points disagree');
+  }
+
+  if (!Number.isFinite(evidence.lowLevelPressureCount) || evidence.lowLevelPressureCount === 0) {
+    score -= 20;
+    crosses.push('Low-level pressure data missing');
+  }
+
+  if (Number(evidence.strongIndicatorCount) <= 1) {
+    score -= 10;
+    crosses.push('Only one strong indicator present');
+  }
+
+  if (cloudOutlier?.hourlyIsolated || cloudOutlier?.routeIsolated) {
+    score -= 15;
+    crosses.push('Cloud base appears isolated versus neighbors');
+  }
+
+  const bounded = Math.max(0, Math.min(100, Math.round(score)));
+  return {
+    score: bounded,
+    classification: confidenceBandFromScore(bounded),
+    evidence: {
+      positive: ticks,
+      negative: crosses
+    }
+  };
+}
+
+function scoreVisibilityConfidence(sample, visibilityConfidence, visibilityOutlier, neighborContext = {}) {
+  const supports = visibilityConfidence?.supports || {};
+  const rawVisibilityKm = Number(visibilityConfidence?.rawVisibilityKm);
+  const ticks = [];
+  const crosses = [];
+  let score = Number.isFinite(rawVisibilityKm) && rawVisibilityKm >= 20 ? 75 : 30;
+
+  if (supports.fogMistCode) {
+    score += 16;
+    ticks.push('Fog/mist weather code support');
+  } else {
+    crosses.push('No fog/mist weather code support');
+  }
+
+  if (supports.precipitation) {
+    score += 14;
+    ticks.push('Precipitation supports reduced visibility');
+  } else {
+    crosses.push('No precipitation support');
+  }
+
+  if (supports.highHumidity) {
+    score += 12;
+    ticks.push('Very high low-level RH support');
+  } else {
+    crosses.push('Low-level RH does not support reduction');
+  }
+
+  if (supports.highLowCloud) {
+    score += 10;
+    ticks.push('Low cloud coverage supports reduction');
+  } else {
+    crosses.push('Low cloud coverage weak');
+  }
+
+  if (supports.neighboringForecastHourSupport) {
+    score += 10;
+    ticks.push('Neighboring forecast hours agree');
+  } else {
+    crosses.push('Neighboring forecast hours disagree');
+  }
+
+  if (supports.neighboringRoutePointSupport) {
+    score += 10;
+    ticks.push('Neighboring route points agree');
+  } else {
+    crosses.push('Neighboring route points disagree');
+  }
+
+  const prevHourHigh = modelVisibilityAbove20Km(sample?.previousHourValues);
+  const nextHourHigh = modelVisibilityAbove20Km(sample?.nextHourValues);
+  const prevRouteHigh = modelVisibilityAbove20Km(neighborContext?.previousRoutePoint);
+  const nextRouteHigh = modelVisibilityAbove20Km(neighborContext?.nextRoutePoint);
+
+  if (Number.isFinite(rawVisibilityKm) && rawVisibilityKm < 10 && prevHourHigh && nextHourHigh) {
+    score -= 18;
+    crosses.push('Surrounding forecast hours all >20 KM');
+  }
+
+  if (Number.isFinite(rawVisibilityKm) && rawVisibilityKm < 10 && prevRouteHigh && nextRouteHigh) {
+    score -= 18;
+    crosses.push('Surrounding route points all >20 KM');
+  }
+
+  if (visibilityOutlier?.hourlyIsolated || visibilityOutlier?.routeIsolated || visibilityConfidence?.isolatedOutlier) {
+    score -= 20;
+    crosses.push('Likely isolated visibility drop');
+  }
+
+  if (Number.isFinite(rawVisibilityKm) && rawVisibilityKm < 10 && Number(supports.supportCount) === 0) {
+    score -= 18;
+    crosses.push('Low visibility has no supporting weather signal');
+  }
+
+  const bounded = Math.max(0, Math.min(100, Math.round(score)));
+  return {
+    score: bounded,
+    classification: confidenceBandFromScore(bounded),
+    evidence: {
+      positive: ticks,
+      negative: crosses
+    }
+  };
+}
+
+function lowCloudSupportFromHourlyContext(hourContext) {
+  if (!hourContext || typeof hourContext !== 'object') return false;
+  const lowCover = Number(hourContext.cloud_cover_low);
+  const precipitation = Number(hourContext.precipitation);
+  const weatherCode = Number(hourContext.weather_code);
+  return (Number.isFinite(lowCover) && lowCover >= 50)
+    || (Number.isFinite(precipitation) && precipitation > 0.1)
+    || weatherCodeSuggestsMoisture(weatherCode);
+}
+
+function visibilitySupportFromHourlyContext(hourContext) {
+  if (!hourContext || typeof hourContext !== 'object') return false;
+  const rawVisibilityM = Number(hourContext.rawVisibilityM);
+  return Number.isFinite(rawVisibilityM) && rawVisibilityM < 10000;
+}
+
+function classifyCloudConfidence(sample, neighborContext = {}) {
+  const evidence = lowCloudEvidenceForSample(sample);
+  const hourSupport = lowCloudSupportFromHourlyContext(sample?.previousHourValues) || lowCloudSupportFromHourlyContext(sample?.nextHourValues);
+  const routeSupport = lowCloudSupportFromHourlyContext(neighborContext.previousRoutePoint) || lowCloudSupportFromHourlyContext(neighborContext.nextRoutePoint);
+  const supportCount = [hourSupport, routeSupport].filter(Boolean).length;
+
+  let confidence = 'NONE';
+  if (evidence.strongIndicatorCount >= 2) confidence = 'HIGH';
+  else if (evidence.strongIndicatorCount >= 1 && (supportCount >= 1 || evidence.anyIndicatorCount >= 2)) confidence = 'MEDIUM';
+  else if (evidence.anyIndicatorCount >= 1) confidence = 'LOW';
+
+  return {
+    confidence,
+    evidence: {
+      ...evidence,
+      neighboringForecastHourSupport: hourSupport,
+      neighboringRoutePointSupport: routeSupport
+    }
+  };
+}
+
+function classifyVisibilityConfidence(sample, neighborContext = {}) {
+  const rawVisibilityM = Number(sample?.rawVisibilityM);
+  const rawVisibilityKm = Number.isFinite(rawVisibilityM) ? rawVisibilityM / 1000 : null;
+  const levels = pressureLevelsForLowCloud(sample);
+  const highHumidity = levels.some(level => Number(level?.relativeHumidityPercent) >= 90);
+  const highLowCloud = Number(sample?.cloudCoverLowPercent) >= 60;
+  const precipitation = Number(sample?.precipitationMm);
+  const weatherCode = Number(sample?.weatherCode);
+  const fogMistCode = FOG_MIST_WEATHER_CODES.has(weatherCode);
+  const precipSupport = Number.isFinite(precipitation) && precipitation > 0.1;
+  const neighboringHourSupport = visibilitySupportFromHourlyContext(sample?.previousHourValues) || visibilitySupportFromHourlyContext(sample?.nextHourValues);
+  const neighboringRouteSupport = visibilitySupportFromHourlyContext(neighborContext.previousRoutePoint) || visibilitySupportFromHourlyContext(neighborContext.nextRoutePoint);
+  const supportCount = [fogMistCode, precipSupport, highHumidity, highLowCloud, neighboringHourSupport, neighboringRouteSupport].filter(Boolean).length;
+
+  if (!Number.isFinite(rawVisibilityKm)) {
+    return {
+      confidence: 'NONE',
+      rawVisibilityKm: null,
+      isolatedOutlier: false,
+      supports: {
+        fogMistCode,
+        precipitation: precipSupport,
+        highHumidity,
+        highLowCloud,
+        neighboringForecastHourSupport: neighboringHourSupport,
+        neighboringRoutePointSupport: neighboringRouteSupport,
+        supportCount
+      }
+    };
+  }
+
+  if (rawVisibilityKm >= 10) {
+    return {
+      confidence: 'HIGH',
+      rawVisibilityKm,
+      isolatedOutlier: false,
+      supports: {
+        fogMistCode,
+        precipitation: precipSupport,
+        highHumidity,
+        highLowCloud,
+        neighboringForecastHourSupport: neighboringHourSupport,
+        neighboringRoutePointSupport: neighboringRouteSupport,
+        supportCount
+      }
+    };
+  }
+
+  let confidence = 'LOW';
+  if (supportCount >= 2) confidence = 'HIGH';
+  else if (supportCount === 1) confidence = 'MEDIUM';
+
+  const isolatedOutlier = rawVisibilityKm < 5 && supportCount === 0;
+  return {
+    confidence,
+    rawVisibilityKm,
+    isolatedOutlier,
+    supports: {
+      fogMistCode,
+      precipitation: precipSupport,
+      highHumidity,
+      highLowCloud,
+      neighboringForecastHourSupport: neighboringHourSupport,
+      neighboringRoutePointSupport: neighboringRouteSupport,
+      supportCount
+    }
+  };
+}
+
+function visibilityDropOutlier(sample, neighborContext = {}) {
+  const current = Number(sample?.rawVisibilityM);
+  if (!Number.isFinite(current) || current <= 0) return { hourlyIsolated: false, routeIsolated: false };
+
+  const prevHour = Number(sample?.previousHourValues?.rawVisibilityM);
+  const nextHour = Number(sample?.nextHourValues?.rawVisibilityM);
+  const prevRoute = Number(neighborContext.previousRoutePoint?.rawVisibilityM);
+  const nextRoute = Number(neighborContext.nextRoutePoint?.rawVisibilityM);
+
+  const hourlyIsolated = Number.isFinite(prevHour)
+    && Number.isFinite(nextHour)
+    && prevHour > 0
+    && nextHour > 0
+    && current < prevHour * 0.4
+    && current < nextHour * 0.4;
+
+  const routeIsolated = Number.isFinite(prevRoute)
+    && Number.isFinite(nextRoute)
+    && prevRoute > 0
+    && nextRoute > 0
+    && current < prevRoute * 0.4
+    && current < nextRoute * 0.4;
+
+  return { hourlyIsolated, routeIsolated };
+}
+
+function cloudBaseDropOutlier(sample, neighborContext = {}) {
+  const current = Number(sample?.cloudBaseAmslFt);
+  const prevHour = Number(sample?.previousHourValues?.cloudBaseAmslFt);
+  const nextHour = Number(sample?.nextHourValues?.cloudBaseAmslFt);
+  const prevRoute = Number(neighborContext.previousRoutePoint?.cloudBaseAmslFt);
+  const nextRoute = Number(neighborContext.nextRoutePoint?.cloudBaseAmslFt);
+
+  const hourlyIsolated = Number.isFinite(current)
+    && Number.isFinite(prevHour)
+    && Number.isFinite(nextHour)
+    && current + 1500 < prevHour
+    && current + 1500 < nextHour;
+
+  const routeIsolated = Number.isFinite(current)
+    && Number.isFinite(prevRoute)
+    && Number.isFinite(nextRoute)
+    && current + 1500 < prevRoute
+    && current + 1500 < nextRoute;
+
+  return { hourlyIsolated, routeIsolated };
+}
+
+function buildAviationPlausibilityReference(point, etaIso, metarsByCode, tafsByCode) {
+  if (!isAirportReference(point)) return null;
+  const ownCode = String(point?.code || '').toUpperCase();
+  if (!ownCode) return null;
+  const ownAirport = { ...point, code: ownCode };
+  const nowMs = Date.now();
+
+  const ownTaf = tafsByCode.get(ownCode);
+  if (ownTaf) {
+    const tafWeather = buildTafAirportWeather(ownTaf, ownAirport, etaIso, { requireCoverage: true });
+    if (tafWeather) {
+      return {
+        source: 'TAF',
+        cloud: tafWeather.cloudDisplay,
+        visibility: tafWeather.visibilityText || tafWeather.visibilityKm,
+        referenceIcao: ownCode
+      };
+    }
+  }
+
+  const ownMetar = metarsByCode.get(ownCode);
+  if (ownMetar && hasRecentMetar(ownMetar, nowMs, 90)) {
+    const metarWeather = buildMetarAirportWeather(ownMetar, ownAirport);
+    return {
+      source: 'METAR',
+      cloud: metarWeather.cloudDisplay,
+      visibility: metarWeather.visibilityText || metarWeather.visibilityKm,
+      referenceIcao: ownCode
+    };
+  }
+
+  return null;
+}
+
+async function runModelComparisonDiagnostics(forecastIso, requestCache) {
+  if (!MODEL_COMPARISON_DIAGNOSTICS_ENABLED) return;
+  const points = MODEL_COMPARISON_TEST_CODES
+    .map(code => locations.find(location => String(location?.code || '').toUpperCase() === code))
+    .filter(Boolean)
+    .map(location => ({ name: location.name, code: location.code, lat: location.lat, lon: location.lon }));
+  if (!points.length) return;
+
+  for (const modelEntry of MODEL_COMPARISON_MODELS) {
+    try {
+      const url = buildBatchUrl(points, { model: modelEntry.model });
+      const payload = await fetchJsonWithRetry(url, requestCache);
+      const rows = normaliseBatchResponse(payload);
+      const diagnostics = rows.map((row, index) => {
+        const point = points[index] || { name: 'Unknown', code: null, lat: null, lon: null };
+        const sample = extractHourlySample(row, forecastIso, { modelIdentifierRequested: modelEntry.model || 'best_match' });
+        const lowLevels = pressureLevelsForLowCloud(sample).map(level => ({
+          pressureHpa: level.pressureHpa,
+          relativeHumidityPercent: level.relativeHumidityPercent,
+          cloudCoverPercent: level.cloudCoverPercent,
+          heightMeters: level.heightMeters
+        }));
+        return {
+          location: point.name,
+          code: point.code,
+          forecastTime: sample.forecastTime,
+          cloudCoverLowPercent: sample.cloudCoverLowPercent,
+          pressureEvidence: lowLevels,
+          visibilityKm: sample.visibilityKm,
+          rawVisibilityM: sample.rawVisibilityM,
+          precipitationMm: sample.precipitationMm
+        };
+      });
+
+      console.info('[Takeoff model plausibility]', {
+        stage: 'A',
+        kind: 'model-comparison',
+        modelRequested: modelEntry.model || 'best_match',
+        modelLabel: modelEntry.label,
+        diagnostics
+      });
+    } catch (error) {
+      console.info('[Takeoff model plausibility]', {
+        stage: 'A',
+        kind: 'model-comparison',
+        modelRequested: modelEntry.model || 'best_match',
+        modelLabel: modelEntry.label,
+        error: error?.message || String(error)
+      });
+    }
+  }
+}
+
 function visibilityKm(valueM) {
   return Number.isFinite(valueM) ? valueM / 1000 : null;
 }
@@ -367,9 +1151,9 @@ function cloudStatus(sample) {
 
   const cloudBaseFt = Number.isFinite(sample?.cloudStatusFt) ? sample.cloudStatusFt : null;
   if (!Number.isFinite(cloudBaseFt)) return null;
-  if (cloudBaseFt > 3000) return 'good';
-  if (cloudBaseFt >= 1500) return 'review';
-  if (cloudBaseFt >= 700) return 'caution';
+  if (cloudBaseFt >= 2000) return 'good';
+  if (cloudBaseFt >= 1000) return 'review';
+  if (cloudBaseFt >= 500) return 'caution';
   return 'poor';
 }
 
@@ -377,9 +1161,9 @@ function visibilityStatus(sample) {
   if (sample?.cavokReported) return 'good';
   const visibilityKm = Number.isFinite(sample?.visibilityKm) ? sample.visibilityKm : null;
   if (!Number.isFinite(visibilityKm)) return null;
-  if (visibilityKm > 20) return 'good';
-  if (visibilityKm >= 10) return 'review';
-  if (visibilityKm >= 5) return 'caution';
+  if (visibilityKm >= 8) return 'good';
+  if (visibilityKm >= 5) return 'review';
+  if (visibilityKm >= 3) return 'caution';
   return 'poor';
 }
 
@@ -569,6 +1353,34 @@ function nearestAirportWithAviationWeather(point, etaIso, reportingAirports, met
   return null;
 }
 
+function nearestAirportWithTafCoverage(point, etaIso, reportingAirports, tafsByCode, maxDistanceNm = 10) {
+  if (!Array.isArray(reportingAirports) || !reportingAirports.length) return null;
+  const sorted = reportingAirports
+    .map(airport => ({ airport, distanceNm: distanceNm(point, airport) }))
+    .sort((a, b) => a.distanceNm - b.distanceNm);
+
+  for (const candidate of sorted) {
+    if (!Number.isFinite(candidate.distanceNm) || candidate.distanceNm > maxDistanceNm) break;
+    const taf = tafsByCode.get(String(candidate.airport?.code || '').toUpperCase());
+    if (!taf) continue;
+    const tafWeather = buildTafAirportWeather(taf, candidate.airport, etaIso, { requireCoverage: true });
+    if (!tafWeather) continue;
+    return {
+      airport: candidate.airport,
+      distanceNm: candidate.distanceNm,
+      selected: {
+        source: 'TAF',
+        reason: 'TAF group covers waypoint ETA.',
+        weather: tafWeather,
+        rawReport: taf.rawTAF || '',
+        tafGroup: tafWeather.tafGroup || null
+      }
+    };
+  }
+
+  return null;
+}
+
 function parseIsoTimeMs(value) {
   const time = new Date(value).getTime();
   return Number.isFinite(time) ? time : null;
@@ -704,6 +1516,21 @@ function buildTafAirportWeather(taf, point, forecastIso, options = {}) {
     ? { km: 10, text: '≥10 KM' }
     : parseVisibilityKm(null, selected.group.visib);
   const cloudState = buildAirportCloudState(cloud, terrainElevationFt);
+  const parsedRaw = parseTafGroupsFromRaw(
+    taf.rawTAF || '',
+    taf.issueTime || taf.bulletinTime || forecastIso,
+    timestampSecondsToIso(taf.fcsts?.[0]?.timeFrom),
+    timestampSecondsToIso(taf.fcsts?.[0]?.timeTo)
+  );
+  const selectionDiagnostics = buildTafSelectionDiagnostics(taf, forecastIso, options);
+  const selectedGroupStartIso = timestampSecondsToIso(selected.group.timeFrom);
+  const selectedGroupEndIso = timestampSecondsToIso(selected.group.timeTo);
+  const etaInsideSelectedGroup = Boolean(
+    selectedGroupStartIso
+    && selectedGroupEndIso
+    && new Date(forecastIso).getTime() >= new Date(selectedGroupStartIso).getTime()
+    && new Date(forecastIso).getTime() < new Date(selectedGroupEndIso).getTime()
+  );
 
   return {
     source: 'TAF',
@@ -723,7 +1550,34 @@ function buildTafAirportWeather(taf, point, forecastIso, options = {}) {
     metarQnhHpa: Number.isFinite(selected.group.altim) ? Math.round(selected.group.altim) : null,
     metarObsTime: null,
     metarRaw: taf.rawTAF || '',
-    cavokReported
+    cavokReported,
+    tafDiagnostics: {
+      rawTaf: taf.rawTAF || '',
+      issueTimeIso: taf.issueTime || taf.bulletinTime || null,
+      validityStartIso: timestampSecondsToIso(taf.fcsts?.[0]?.timeFrom),
+      validityEndIso: timestampSecondsToIso(taf.fcsts?.[0]?.timeTo),
+      amendmentType: parsedRaw.amendmentType,
+      status: parsedRaw.status,
+      parserGroups: parsedRaw.groups,
+      selection: selectionDiagnostics,
+      selectedGroup: {
+        type: selected.group.fcstChange ? String(selected.group.fcstChange).toUpperCase() : 'PREVAILING',
+        startIso: selectedGroupStartIso,
+        endIso: selectedGroupEndIso,
+        windKt: Number.isFinite(selected.group.wspd) ? Math.round(selected.group.wspd) : null,
+        windDirection: Number.isFinite(selected.group.wdir) ? Math.round(selected.group.wdir) : null,
+        gustKt: Number.isFinite(selected.group.wgst) ? Math.round(selected.group.wgst) : null,
+        visibility: selected.group.visib || null,
+        clouds: Array.isArray(selected.group.clouds) ? selected.group.clouds : []
+      },
+      etaIso: formatIsoUtc(forecastIso),
+      etaNzt: formatIsoNzt(forecastIso),
+      etaInsideSelectedGroup,
+      checks: {
+        modelContamination: false,
+        metarContamination: false
+      }
+    }
   };
 }
 
@@ -750,7 +1604,7 @@ function chunk(array, size) {
   return chunks;
 }
 
-function buildBatchUrl(points) {
+function buildBatchUrl(points, options = {}) {
   const params = new URLSearchParams({
     latitude: points.map(point => point.lat).join(','),
     longitude: points.map(point => point.lon).join(','),
@@ -759,6 +1613,7 @@ function buildBatchUrl(points) {
     timezone: 'Pacific/Auckland',
     forecast_days: '4'
   });
+  if (options.model) params.set('models', options.model);
   return `${API}?${params.toString()}`;
 }
 
@@ -768,22 +1623,44 @@ function normaliseBatchResponse(payload) {
   return [payload];
 }
 
-function extractHourlySample(data, forecastIso) {
+function extractHourlyContext(data, index) {
+  if (!data?.hourly || !Number.isFinite(index) || index < 0 || index >= data.hourly.time.length) return null;
+  return {
+    time: data.hourly.time[index],
+    rawVisibilityM: Number.isFinite(Number(data.hourly.visibility?.[index])) ? Number(data.hourly.visibility[index]) : null,
+    cloud_cover: percentOrNull(data.hourly.cloud_cover?.[index]),
+    cloud_cover_low: percentOrNull(data.hourly.cloud_cover_low?.[index]),
+    cloud_cover_mid: percentOrNull(data.hourly.cloud_cover_mid?.[index]),
+    cloud_cover_high: percentOrNull(data.hourly.cloud_cover_high?.[index]),
+    temperature_2m: Number.isFinite(Number(data.hourly.temperature_2m?.[index])) ? Number(data.hourly.temperature_2m[index]) : null,
+    dew_point_2m: Number.isFinite(Number(data.hourly.dew_point_2m?.[index])) ? Number(data.hourly.dew_point_2m[index]) : null,
+    weather_code: Number.isFinite(Number(data.hourly.weather_code?.[index])) ? Number(data.hourly.weather_code[index]) : null,
+    precipitation: Number.isFinite(Number(data.hourly.precipitation?.[index])) ? Number(data.hourly.precipitation[index]) : null
+  };
+}
+
+function extractHourlySample(data, forecastIso, options = {}) {
   const i = nearestIndex(data.hourly.time, forecastIso);
+  const rawVisibilityM = Number(data.hourly.visibility[i]);
   const sample = {
     forecastTime: data.hourly.time[i],
+    modelIdentifierRequested: options.modelIdentifierRequested || 'best_match',
+    modelIdentifierReturned: String(data?.model || data?.model_id || data?.modelName || '').trim() || null,
+    rawVisibilityM: Number.isFinite(rawVisibilityM) ? rawVisibilityM : null,
     temperature2mC: data.hourly.temperature_2m[i],
     dewPoint2mC: data.hourly.dew_point_2m[i],
     cloudCoverTotalPercent: percentOrNull(data.hourly.cloud_cover[i]),
     cloudCoverLowPercent: percentOrNull(data.hourly.cloud_cover_low[i]),
     cloudCoverMidPercent: percentOrNull(data.hourly.cloud_cover_mid[i]),
     cloudCoverHighPercent: percentOrNull(data.hourly.cloud_cover_high[i]),
-    visibilityKm: visibilityKm(data.hourly.visibility[i]),
+    visibilityKm: visibilityKm(rawVisibilityM),
     precipitationMm: data.hourly.precipitation[i],
     weatherCode: data.hourly.weather_code[i],
     windKt: Math.round(data.hourly.wind_speed_10m[i] ?? 0),
     windDirection: Math.round(data.hourly.wind_direction_10m[i] ?? 0),
-    gustKt: Math.round(data.hourly.wind_gusts_10m[i] ?? 0)
+    gustKt: Math.round(data.hourly.wind_gusts_10m[i] ?? 0),
+    previousHourValues: extractHourlyContext(data, i - 1),
+    nextHourValues: extractHourlyContext(data, i + 1)
   };
 
   PRESSURE_LEVELS.forEach(level => {
@@ -813,27 +1690,27 @@ function extractHourlySample(data, forecastIso) {
   };
 }
 
-async function fetchRepresentativeWeather(representatives, forecastIso, requestCache) {
+async function fetchRepresentativeWeather(representatives, forecastIso, requestCache, options = {}) {
   const result = new Map();
 
   const batches = chunk(representatives, MAX_COORDS_PER_BATCH);
   for (const batch of batches) {
-    const url = buildBatchUrl(batch);
+    const url = buildBatchUrl(batch, { model: options.model || null });
     const payload = await fetchJsonWithRetry(url, requestCache);
     const rows = normaliseBatchResponse(payload);
 
     if (rows.length !== batch.length) {
       for (let i = 0; i < batch.length; i += 1) {
-        const singleUrl = buildBatchUrl([batch[i]]);
+        const singleUrl = buildBatchUrl([batch[i]], { model: options.model || null });
         const singlePayload = await fetchJsonWithRetry(singleUrl, requestCache);
         const singleRow = normaliseBatchResponse(singlePayload)[0];
-        result.set(batch[i], extractHourlySample(singleRow, forecastIso));
+        result.set(batch[i], extractHourlySample(singleRow, forecastIso, { modelIdentifierRequested: options.model || 'best_match' }));
       }
       continue;
     }
 
     rows.forEach((row, index) => {
-      result.set(batch[index], extractHourlySample(row, forecastIso));
+      result.set(batch[index], extractHourlySample(row, forecastIso, { modelIdentifierRequested: options.model || 'best_match' }));
     });
   }
 
@@ -865,6 +1742,7 @@ export async function fetchRouteWeather(routeReferences, forecastIso, options = 
   const airportCodes = [...new Set(airportCatalog.map(airport => airport.code))];
   const metarsByCode = AIRPORT_REPORT_LOOKUPS_ENABLED ? await fetchMetars(airportCodes) : new Map();
   const tafsByCode = AIRPORT_REPORT_LOOKUPS_ENABLED ? await fetchTafs(airportCodes) : new Map();
+  const selectedAirportNoLocalTafIndexes = new Set();
 
   const logSourceSelection = ({ point, nearest, source, reason }) => {
     console.info('[Takeoff source selection]', {
@@ -892,49 +1770,86 @@ export async function fetchRouteWeather(routeReferences, forecastIso, options = 
       }
 
       const pointEtaIso = etaByIndex.get(index) || forecastIso;
-      const selected = buildAviationWeatherForAirport(ownAirport, pointEtaIso, metarsByCode, tafsByCode);
-      if (!selected) {
-        const nearby = nearestAirportWithAviationWeather(point, pointEtaIso, airportCatalog.filter(airport => airport.code !== ownCode), metarsByCode, tafsByCode);
-        if (!nearby) {
-          logSourceSelection({ point, nearest, source: 'Forecast', reason: 'No METAR or valid TAF available for user-entered airport.' });
-          return;
-        }
+      const ownTaf = tafsByCode.get(ownCode);
+      const ownTafWeather = ownTaf
+        ? buildTafAirportWeather(ownTaf, ownAirport, pointEtaIso, { requireCoverage: true })
+        : null;
+
+      if (ownTafWeather) {
+        const selected = {
+          source: 'TAF',
+          reason: 'TAF group covers waypoint ETA.',
+          weather: ownTafWeather,
+          rawReport: ownTaf.rawTAF || '',
+          tafGroup: ownTafWeather.tafGroup || null
+        };
 
         weatherByIndex.set(index, {
-          ...nearby.selected.weather,
-          source: nearby.selected.source,
-          sourceReason: `No valid report at ${ownAirport.code}; using nearest reporting airport ${nearby.airport.code} (${nearby.distanceNm.toFixed(1)} NM). ${nearby.selected.reason}`,
-          reportingAirportIcao: nearby.airport.code,
-          reportingAirportDistanceNm: nearby.distanceNm,
-          sourceLabel: `${nearby.selected.source} ${nearby.airport.code}`
+          ...selected.weather,
+          source: selected.source,
+          sourceReason: selected.reason,
+          reportingAirportIcao: ownAirport.code,
+          reportingAirportDistanceNm: 0,
+          sourceLabel: `${selected.source} ${ownAirport.code}`,
+          pointEtaIso,
+          sourceSelection: {
+            ownAirport: true,
+            nearestAirport: ownAirport.code,
+            nearestDistanceNm: 0,
+            fallbackUsed: false,
+            reasonSelected: selected.reason,
+            selectedAirportIcao: ownAirport.code
+          }
         });
 
-        logSourceSelection({ point, nearest: nearby, source: nearby.selected.source, reason: null });
+        logSourceSelection({ point, nearest, source: selected.source, reason: null });
+        console.info('[Takeoff cloud diagnostic]', {
+          icao: ownAirport.code,
+          point: point.name,
+          source: selected.source,
+          rawReport: selected.rawReport,
+          selectedTafGroup: selected.tafGroup,
+          rawCloudLayers: selected.weather.cloudRawLayers || [],
+          chosenLayer: selected.weather.cloudSelectedLayer || null,
+          airportElevationFt: Number.isFinite(ownAirport.elevationFt) ? ownAirport.elevationFt : null,
+          resultingAglFt: Number.isFinite(selected.weather.cloudBaseAglFt) ? selected.weather.cloudBaseAglFt : null,
+          resultingAmslFt: Number.isFinite(selected.weather.cloudBaseAmslFt) ? selected.weather.cloudBaseAmslFt : null
+        });
+        return;
+      }
+
+      const nearby = nearestAirportWithTafCoverage(
+        point,
+        pointEtaIso,
+        airportCatalog.filter(airport => airport.code !== ownCode && airport.hasTaf === true),
+        tafsByCode,
+        10
+      );
+      if (!nearby) {
+        selectedAirportNoLocalTafIndexes.add(index);
+        logSourceSelection({ point, nearest, source: 'Forecast', reason: 'No local TAF available within 10 NM.' });
         return;
       }
 
       weatherByIndex.set(index, {
-        ...selected.weather,
-        source: selected.source,
-        sourceReason: selected.reason,
-        reportingAirportIcao: ownAirport.code,
-        reportingAirportDistanceNm: 0,
-        sourceLabel: `${selected.source} ${ownAirport.code}`
+        ...nearby.selected.weather,
+        source: nearby.selected.source,
+        sourceReason: `No valid TAF at ${ownAirport.code}; using nearest reporting aerodrome ${nearby.airport.code} (${nearby.distanceNm.toFixed(1)} NM). ${nearby.selected.reason}`,
+        reportingAirportIcao: nearby.airport.code,
+        reportingAirportDistanceNm: nearby.distanceNm,
+        sourceLabel: `TAF ${nearby.airport.code} • ${Math.max(1, Math.round(nearby.distanceNm))} NM`,
+        pointEtaIso,
+        sourceSelection: {
+          ownAirport: true,
+          nearestAirport: nearby.airport.code,
+          nearestDistanceNm: nearby.distanceNm,
+          fallbackUsed: true,
+          reasonSelected: `No valid TAF at ${ownAirport.code}; using nearest reporting aerodrome ${nearby.airport.code} (${nearby.distanceNm.toFixed(1)} NM). ${nearby.selected.reason}`,
+          selectedAirportIcao: nearby.airport.code
+        }
       });
 
-      logSourceSelection({ point, nearest, source: selected.source, reason: null });
-      console.info('[Takeoff cloud diagnostic]', {
-        icao: ownAirport.code,
-        point: point.name,
-        source: selected.source,
-        rawReport: selected.rawReport,
-        selectedTafGroup: selected.tafGroup,
-        rawCloudLayers: selected.weather.cloudRawLayers || [],
-        chosenLayer: selected.weather.cloudSelectedLayer || null,
-        airportElevationFt: Number.isFinite(ownAirport.elevationFt) ? ownAirport.elevationFt : null,
-        resultingAglFt: Number.isFinite(selected.weather.cloudBaseAglFt) ? selected.weather.cloudBaseAglFt : null,
-        resultingAmslFt: Number.isFinite(selected.weather.cloudBaseAmslFt) ? selected.weather.cloudBaseAmslFt : null
-      });
+      logSourceSelection({ point, nearest: nearby, source: nearby.selected.source, reason: null });
       return;
     }
 
@@ -964,10 +1879,21 @@ export async function fetchRouteWeather(routeReferences, forecastIso, options = 
     weatherByIndex.set(index, {
       ...selected.weather,
       source: selected.source,
-        sourceReason: selected.reason,
+      sourceReason: selected.reason,
       reportingAirportIcao: nearest.airport.code,
       reportingAirportDistanceNm: nearest.distanceNm,
-      sourceLabel: `${selected.source} ${nearest.airport.code}`
+      sourceLabel: selected.source === 'TAF'
+        ? `TAF ${nearest.airport.code}${nearest.distanceNm > 0 ? ` • ${Math.max(1, Math.round(nearest.distanceNm))} NM` : ''}`
+        : `${selected.source} ${nearest.airport.code}`,
+      pointEtaIso,
+      sourceSelection: {
+        ownAirport: false,
+        nearestAirport: nearest.airport.code,
+        nearestDistanceNm: nearest.distanceNm,
+        fallbackUsed: false,
+        reasonSelected: selected.reason,
+        selectedAirportIcao: nearest.airport.code
+      }
     });
 
     logSourceSelection({ point, nearest, source: selected.source, reason: null });
@@ -980,14 +1906,19 @@ export async function fetchRouteWeather(routeReferences, forecastIso, options = 
   if (forecastEntries.length) {
     const forecastPoints = forecastEntries.map(entry => entry.point);
     const { representatives, representativeIndexByPoint } = pickRepresentativePoints(forecastPoints);
-    const representativeWeather = await fetchRepresentativeWeather(representatives, forecastIso, requestCache);
+    const representativeWeather = await fetchRepresentativeWeather(representatives, forecastIso, requestCache, { model: null });
 
     forecastEntries.forEach((entry, forecastIndex) => {
       const weather = representativeWeather.get(representatives[representativeIndexByPoint[forecastIndex]]);
+      const selectedAirportNoLocalTaf = selectedAirportNoLocalTafIndexes.has(entry.index);
       weatherByIndex.set(entry.index, {
         source: 'Forecast',
-        sourceReason: 'No valid TAF or recent METAR was available for this point; using model forecast.',
-        sourceLabel: 'Model',
+        sourceReason: selectedAirportNoLocalTaf
+          ? 'No local TAF available.'
+          : 'No valid TAF or recent METAR was available for this point; using model forecast.',
+        sourceLabel: selectedAirportNoLocalTaf
+          ? 'Model • No local TAF available.'
+          : 'Model',
         forecastTime: weather.forecastTime,
         cloudDisplay: weather.cloudDisplay,
         cloudBaseAglFt: weather.cloudBaseAglFt,
@@ -1002,6 +1933,11 @@ export async function fetchRouteWeather(routeReferences, forecastIso, options = 
         cloudCoverMidPercent: weather.cloudCoverMidPercent,
         cloudCoverHighPercent: weather.cloudCoverHighPercent,
         pressureLevels: weather.pressureLevels,
+        rawVisibilityM: weather.rawVisibilityM,
+        modelIdentifierRequested: weather.modelIdentifierRequested,
+        modelIdentifierReturned: weather.modelIdentifierReturned,
+        previousHourValues: weather.previousHourValues || null,
+        nextHourValues: weather.nextHourValues || null,
         visibilityKm: weather.visibilityKm,
         precipitationMm: weather.precipitationMm,
         weatherCode: weather.weatherCode,
@@ -1012,7 +1948,7 @@ export async function fetchRouteWeather(routeReferences, forecastIso, options = 
     });
   }
 
-  return routeReferences.map((point, pointIndex) => {
+  const samples = routeReferences.map((point, pointIndex) => {
     const weather = weatherByIndex.get(pointIndex);
     if (!weather) throw new Error('Weather data unavailable for one or more route points. Please try again.');
 
@@ -1033,6 +1969,7 @@ export async function fetchRouteWeather(routeReferences, forecastIso, options = 
       tafGroup: weather.tafGroup || null,
       reportingAirportIcao: weather.reportingAirportIcao || null,
       reportingAirportDistanceNm: Number.isFinite(weather.reportingAirportDistanceNm) ? weather.reportingAirportDistanceNm : null,
+      pointEtaIso: weather.pointEtaIso || etaByIndex.get(pointIndex) || forecastIso,
       forecastTime: weather.forecastTime,
       cloudDisplay: weather.cloudDisplay,
       cloudBaseAglFt: weather.source === 'Forecast' ? null : weather.cloudBaseAglFt,
@@ -1047,6 +1984,11 @@ export async function fetchRouteWeather(routeReferences, forecastIso, options = 
       cloudCoverMidPercent: weather.cloudCoverMidPercent ?? null,
       cloudCoverHighPercent: weather.cloudCoverHighPercent ?? null,
       pressureLevels: Array.isArray(weather.pressureLevels) ? weather.pressureLevels : [],
+      rawVisibilityM: Number.isFinite(weather.rawVisibilityM) ? weather.rawVisibilityM : null,
+      modelIdentifierRequested: weather.modelIdentifierRequested || null,
+      modelIdentifierReturned: weather.modelIdentifierReturned || null,
+      previousHourValues: weather.previousHourValues || null,
+      nextHourValues: weather.nextHourValues || null,
       visibilityKm: weather.visibilityKm,
       visibilityText: weather.visibilityText,
       precipitationMm: weather.precipitationMm,
@@ -1060,10 +2002,237 @@ export async function fetchRouteWeather(routeReferences, forecastIso, options = 
       metarQnhHpa: weather.metarQnhHpa,
       metarObsTime: weather.metarObsTime,
       metarRaw: weather.metarRaw,
-      cavokReported: Boolean(weather.cavokReported)
+      cavokReported: Boolean(weather.cavokReported),
+      sourceSelection: weather.sourceSelection || {
+        ownAirport: isAirportReference(point),
+        nearestAirport: weather.reportingAirportIcao || null,
+        nearestDistanceNm: Number.isFinite(weather.reportingAirportDistanceNm) ? weather.reportingAirportDistanceNm : null,
+        fallbackUsed: false,
+        reasonSelected: weather.sourceReason || null,
+        selectedAirportIcao: weather.reportingAirportIcao || null
+      },
+      tafDiagnostics: weather.tafDiagnostics || null
     };
     sample.terrainClearance = terrainClearanceWorkflowPlaceholder(sample);
     sample.status = weatherStatus(sample);
+    if (sample.source === 'TAF' && sample.tafDiagnostics) {
+      const fieldConsistency = buildTafFieldConsistency(sample, point, sample.reportingAirportIcao);
+      sample.tafDiagnostics.fieldConsistency = fieldConsistency;
+      sample.tafDiagnostics.checks = {
+        ...sample.tafDiagnostics.checks,
+        valuesComeFromOneSelectedGroup: !fieldConsistency.mixedSourcesDetected,
+        fallbackContamination: fieldConsistency.fallbackAirportUsed && !String(sample.sourceLabel || '').includes(String(sample.reportingAirportIcao || '')),
+        sourceLabelMatchesSelection: String(sample.sourceLabel || '').trim() === `TAF ${sample.reportingAirportIcao}`
+      };
+
+      console.info('[Takeoff TAF diagnostic pipeline]', {
+        airport: {
+          cardAirport: sample.name,
+          icao: String(sample.code || '').toUpperCase(),
+          etaUtc: sample.tafDiagnostics.etaIso,
+          etaNzt: sample.tafDiagnostics.etaNzt
+        },
+        sourceSelection: {
+          ownAirport: sample.sourceSelection?.ownAirport,
+          nearestAirport: sample.sourceSelection?.nearestAirport,
+          fallbackUsed: sample.sourceSelection?.fallbackUsed,
+          reasonSelected: sample.sourceSelection?.reasonSelected
+        },
+        rawTaf: {
+          text: sample.tafDiagnostics.rawTaf,
+          issueTime: sample.tafDiagnostics.issueTimeIso,
+          validityStart: sample.tafDiagnostics.validityStartIso,
+          validityEnd: sample.tafDiagnostics.validityEndIso,
+          status: sample.tafDiagnostics.status
+        },
+        parser: {
+          groupCount: Array.isArray(sample.tafDiagnostics.parserGroups) ? sample.tafDiagnostics.parserGroups.length : 0,
+          groups: sample.tafDiagnostics.parserGroups
+        },
+        etaSelection: {
+          selectedGroup: sample.tafDiagnostics.selectedGroup,
+          selection: sample.tafDiagnostics.selection
+        },
+        finalWeatherSample: {
+          cloud: sample.cloudDisplay,
+          visibility: sample.visibilityText || sample.visibilityKm,
+          wind: sample.windText,
+          weather: null,
+          rain: sample.precipitationMm,
+          sourceLabel: sample.sourceLabel
+        },
+        consistencyCheck: sample.tafDiagnostics.fieldConsistency,
+        integrityChecks: sample.tafDiagnostics.checks
+      });
+    }
     return sample;
   });
+
+  samples.forEach((sample, index) => {
+    if (sample.source !== 'Forecast' || !MODEL_PLAUSIBILITY_DIAGNOSTICS_ENABLED) return;
+
+    const previousRoutePoint = samples[index - 1]?.source === 'Forecast' ? samples[index - 1] : null;
+    const nextRoutePoint = samples[index + 1]?.source === 'Forecast' ? samples[index + 1] : null;
+    const neighborContext = { previousRoutePoint, nextRoutePoint };
+    const cloudConfidence = classifyCloudConfidence(sample, neighborContext);
+    const visibilityConfidence = classifyVisibilityConfidence(sample, neighborContext);
+    const visibilityOutlier = visibilityDropOutlier(sample, neighborContext);
+    const cloudOutlier = cloudBaseDropOutlier(sample, neighborContext);
+    const cloudConfidenceScored = scoreCloudConfidence(sample, cloudConfidence, cloudOutlier);
+    const visibilityConfidenceScored = scoreVisibilityConfidence(sample, visibilityConfidence, visibilityOutlier, neighborContext);
+    const aviationReference = buildAviationPlausibilityReference(routeReferences[index], sample.pointEtaIso || forecastIso, metarsByCode, tafsByCode);
+
+    sample.modelPlausibility = {
+      stage: 'C',
+      cloudConfidence: cloudConfidenceScored.classification,
+      cloudConfidenceScore: cloudConfidenceScored.score,
+      visibilityConfidence: visibilityConfidenceScored.classification,
+      visibilityConfidenceScore: visibilityConfidenceScored.score,
+      cloudEvidence: cloudConfidence.evidence,
+      cloudEvidenceSummary: cloudConfidenceScored.evidence,
+      visibilityEvidence: visibilityConfidence.supports,
+      visibilityEvidenceSummary: visibilityConfidenceScored.evidence,
+      outliers: {
+        visibilityHourlyIsolated: visibilityOutlier.hourlyIsolated,
+        visibilityRouteIsolated: visibilityOutlier.routeIsolated,
+        cloudHourlyIsolated: cloudOutlier.hourlyIsolated,
+        cloudRouteIsolated: cloudOutlier.routeIsolated,
+        isolatedLowVisibility: visibilityConfidence.isolatedOutlier
+      }
+    };
+
+    console.info('[Takeoff model plausibility]', {
+      stage: 'C',
+      point: {
+        name: sample.name,
+        latitude: Number.isFinite(sample.latitude) ? Number(sample.latitude.toFixed(4)) : null,
+        longitude: Number.isFinite(sample.longitude) ? Number(sample.longitude.toFixed(4)) : null,
+        forecastTime: sample.forecastTime,
+        modelRequested: sample.modelIdentifierRequested,
+        modelReturned: sample.modelIdentifierReturned
+      },
+      raw: {
+        visibilityM: sample.rawVisibilityM,
+        cloudCoverTotalPercent: sample.cloudCoverTotalPercent,
+        cloudCoverLowPercent: sample.cloudCoverLowPercent,
+        cloudCoverMidPercent: sample.cloudCoverMidPercent,
+        cloudCoverHighPercent: sample.cloudCoverHighPercent,
+        temperature2mC: sample.temperature2mC,
+        dewPoint2mC: sample.dewPoint2mC,
+        weatherCode: sample.weatherCode,
+        precipitationMm: sample.precipitationMm,
+        pressureLevels: sample.pressureLevels
+      },
+      previousRoutePointValues: previousRoutePoint ? {
+        name: previousRoutePoint.name,
+        rawVisibilityM: previousRoutePoint.rawVisibilityM,
+        cloudBaseAmslFt: previousRoutePoint.cloudBaseAmslFt,
+        cloudCoverLowPercent: previousRoutePoint.cloudCoverLowPercent,
+        weatherCode: previousRoutePoint.weatherCode,
+        precipitationMm: previousRoutePoint.precipitationMm
+      } : null,
+      nextRoutePointValues: nextRoutePoint ? {
+        name: nextRoutePoint.name,
+        rawVisibilityM: nextRoutePoint.rawVisibilityM,
+        cloudBaseAmslFt: nextRoutePoint.cloudBaseAmslFt,
+        cloudCoverLowPercent: nextRoutePoint.cloudCoverLowPercent,
+        weatherCode: nextRoutePoint.weatherCode,
+        precipitationMm: nextRoutePoint.precipitationMm
+      } : null,
+      previousForecastHourValues: sample.previousHourValues,
+      nextForecastHourValues: sample.nextHourValues,
+      confidence: {
+        cloud: {
+          score: cloudConfidenceScored.score,
+          classification: cloudConfidenceScored.classification,
+          evidence: cloudConfidenceScored.evidence,
+          rawEvidence: cloudConfidence
+        },
+        visibility: {
+          score: visibilityConfidenceScored.score,
+          classification: visibilityConfidenceScored.classification,
+          evidence: visibilityConfidenceScored.evidence,
+          rawEvidence: visibilityConfidence
+        }
+      },
+      outlierDecision: {
+        visibility: visibilityOutlier,
+        cloudBase: cloudOutlier
+      },
+      aviationCrossCheck: aviationReference ? {
+        source: aviationReference.source,
+        referenceIcao: aviationReference.referenceIcao,
+        modelCloud: sample.cloudDisplay,
+        aviationCloud: aviationReference.cloud,
+        modelVisibility: Number.isFinite(sample.visibilityKm) ? `${Math.round(sample.visibilityKm)} KM` : null,
+        aviationVisibility: aviationReference.visibility,
+        difference: {
+          visibilityKm: Number.isFinite(sample.visibilityKm) && Number.isFinite(Number(aviationReference.visibility))
+            ? Number((sample.visibilityKm - Number(aviationReference.visibility)).toFixed(1))
+            : null,
+          cloudAmslFt: Number.isFinite(sample.cloudBaseAmslFt) ? sample.cloudBaseAmslFt : null
+        },
+        flaggedAsOutlier: visibilityOutlier.hourlyIsolated || visibilityOutlier.routeIsolated || cloudOutlier.hourlyIsolated || cloudOutlier.routeIsolated
+      } : null
+    });
+
+    console.info('[Takeoff model plausibility]', {
+      stage: 'C',
+      format: 'MODEL CONFIDENCE',
+      location: sample.name,
+      cloud: {
+        score: cloudConfidenceScored.score,
+        classification: cloudConfidenceScored.classification,
+        evidence: {
+          positive: cloudConfidenceScored.evidence.positive.map(item => `✓ ${item}`),
+          negative: cloudConfidenceScored.evidence.negative.map(item => `✗ ${item}`)
+        }
+      },
+      visibility: {
+        score: visibilityConfidenceScored.score,
+        classification: visibilityConfidenceScored.classification,
+        evidence: {
+          positive: visibilityConfidenceScored.evidence.positive.map(item => `✓ ${item}`),
+          negative: visibilityConfidenceScored.evidence.negative.map(item => `✗ ${item}`)
+        }
+      },
+      classification: (visibilityOutlier.hourlyIsolated || visibilityOutlier.routeIsolated || visibilityConfidence.isolatedOutlier)
+        ? 'Likely isolated model outlier'
+        : 'No isolated outlier signal'
+    });
+  });
+
+  const forecastPlausibility = samples
+    .filter(sample => sample.source === 'Forecast' && sample.modelPlausibility)
+    .map(sample => sample.modelPlausibility);
+  if (forecastPlausibility.length) {
+    const cloudHigh = forecastPlausibility.filter(item => item.cloudConfidence === 'HIGH').length;
+    const cloudMedium = forecastPlausibility.filter(item => item.cloudConfidence === 'MEDIUM').length;
+    const cloudLow = forecastPlausibility.filter(item => item.cloudConfidence === 'LOW').length;
+    const visibilityHigh = forecastPlausibility.filter(item => item.visibilityConfidence === 'HIGH').length;
+    const visibilityMedium = forecastPlausibility.filter(item => item.visibilityConfidence === 'MEDIUM').length;
+    const visibilityLow = forecastPlausibility.filter(item => item.visibilityConfidence === 'LOW').length;
+    const averageCloudConfidence = Number((forecastPlausibility.reduce((sum, item) => sum + (item.cloudConfidenceScore || 0), 0) / forecastPlausibility.length).toFixed(1));
+    const averageVisibilityConfidence = Number((forecastPlausibility.reduce((sum, item) => sum + (item.visibilityConfidenceScore || 0), 0) / forecastPlausibility.length).toFixed(1));
+
+    console.info('[Takeoff model plausibility]', {
+      stage: 'C',
+      format: 'MODEL CONFIDENCE SUMMARY',
+      cloud: {
+        numberHigh: cloudHigh,
+        numberMedium: cloudMedium,
+        numberLow: cloudLow,
+        averageConfidence: averageCloudConfidence
+      },
+      visibility: {
+        numberHigh: visibilityHigh,
+        numberMedium: visibilityMedium,
+        numberLow: visibilityLow,
+        averageConfidence: averageVisibilityConfidence
+      }
+    });
+  }
+
+  await runModelComparisonDiagnostics(forecastIso, requestCache);
+  return samples;
 }
