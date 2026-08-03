@@ -159,6 +159,7 @@ export function renderLimitingBanner(container, samples, onSelect) {
 
 export function renderWeatherCards(container, samples, onSelect) {
   container.innerHTML = samples.map((sample, index) => {
+    const sampleIndex = Number.isInteger(sample.cardSampleIndex) ? sample.cardSampleIndex : index;
     const cloud = formatCloud(sample, { surface: 'card' });
     const visibility = sample.cavokReported
       ? '≥10 KM'
@@ -186,7 +187,7 @@ export function renderWeatherCards(container, samples, onSelect) {
       <div class="weather-row"><span>💧</span><strong>${Number.isFinite(sample.metarDewPointC) ? `${sample.metarDewPointC} C` : '—'}</strong></div>
       <div class="weather-row"><span>⚖</span><strong>${Number.isFinite(sample.metarQnhHpa) ? `${sample.metarQnhHpa} HPA` : '—'}</strong></div>
       <div class="weather-row"><span>🕒</span><strong>${sample.metarObsTime || '—'}</strong></div>` : '';
-    return `<button type="button" class="weather-card card-${sample.status}" data-index="${index}">
+    return `<button type="button" class="weather-card card-${sample.status}" data-index="${sampleIndex}">
       <h3>${sample.name.toUpperCase()}</h3>
       <div class="weather-row"><span>☁</span><strong>${cloud}</strong></div>
       <div class="weather-row"><span>👁</span><strong>${visibility}</strong></div>
@@ -200,7 +201,7 @@ export function renderWeatherCards(container, samples, onSelect) {
 }
 
 export function highlightCard(container, index) {
-  container.querySelectorAll('.weather-card').forEach((card, i) => card.classList.toggle('active', i === index));
+  container.querySelectorAll('.weather-card').forEach(card => card.classList.toggle('active', Number(card.dataset.index) === index));
   const target = container.querySelector(`[data-index="${index}"]`);
   target?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
 }

@@ -1,5 +1,5 @@
 import { locations, resolveLocation, titleForInput } from './airports.js';
-import { buildRouteReferences, routeDistanceNm } from './routeReferences.js';
+import { buildRouteReferences, routeDistanceNm, distanceNm } from './routeReferences.js';
 import { fetchRouteWeather } from './weather.js';
 import { getTerrainElevation } from './terrain.js';
 import { saveFlight, loadFlight } from './storage.js';
@@ -22,7 +22,7 @@ const timePickerWheel = $('timePickerWheel');
 const timePickerCancel = $('timePickerCancel');
 const timePickerDone = $('timePickerDone');
 
-const TIME_STEP_MINUTES = 15;
+const TIME_STEP_MINUTES = 5;
 const TIME_VALUES = Array.from({ length: 24 * 60 / TIME_STEP_MINUTES }, (_, index) => {
   const totalMinutes = index * TIME_STEP_MINUTES;
   const hours = String(Math.floor(totalMinutes / 60)).padStart(2, '0');
@@ -44,8 +44,18 @@ function formatTimeValue(totalMinutes) {
 }
 
 function nearestUpcomingTime(date = new Date()) {
-  const minutes = date.getHours() * 60 + date.getMinutes();
-  return formatTimeValue(Math.ceil(minutes / TIME_STEP_MINUTES) * TIME_STEP_MINUTES);
+  const parts = new Intl.DateTimeFormat('en-NZ', {
+    timeZone: 'Pacific/Auckland',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false
+  }).formatToParts(date);
+  const hourPart = Number(parts.find(part => part.type === 'hour')?.value);
+  const minutePart = Number(parts.find(part => part.type === 'minute')?.value);
+  const localHour = Number.isFinite(hourPart) ? hourPart : date.getHours();
+  const localMinute = Number.isFinite(minutePart) ? minutePart : date.getMinutes();
+  const minutes = localHour * 60 + localMinute + 60;
+  return formatTimeValue(Math.round(minutes / TIME_STEP_MINUTES) * TIME_STEP_MINUTES);
 }
 
 function timeValueIndex(value) {
@@ -230,6 +240,89 @@ function logTerrainDiagnostics(samples) {
   })));
 }
 
+function etaMinutesDifference(aIso, bIso) {
+  const a = new Date(aIso).getTime();
+  const b = new Date(bIso).getTime();
+  if (!Number.isFinite(a) || !Number.isFinite(b)) return null;
+  return Math.abs((a - b) / 60000);
+}
+
+function buildVisibleCardSamples(samples) {
+  const MAX_DUPLICATE_DISTANCE_NM = 10;
+  const MAX_VISIBLE_GAP_NM = 100;
+
+  const airportByName = new Map();
+  samples.forEach((sample, index) => {
+    const isAirportSample = sample?.type === 'airport' && !sample?.automatic;
+    if (!isAirportSample) return;
+    const key = String(sample.name || '').trim().toUpperCase();
+    if (!key) return;
+    const list = airportByName.get(key) || [];
+    list.push({ sample, index });
+    airportByName.set(key, list);
+  });
+
+  const suppressedIndexes = new Set();
+  const renameByIndex = new Map();
+
+  samples.forEach((sample, index) => {
+    if (!sample?.automatic) return;
+    const key = String(sample.name || '').trim().toUpperCase();
+    if (!key) return;
+    const airports = airportByName.get(key) || [];
+    if (!airports.length) return;
+
+    const nearest = airports
+      .map(item => ({
+        ...item,
+        distanceNm: distanceNm(sample, item.sample)
+      }))
+      .sort((a, b) => a.distanceNm - b.distanceNm)[0];
+
+    if (!nearest || !Number.isFinite(nearest.distanceNm) || nearest.distanceNm > MAX_DUPLICATE_DISTANCE_NM) return;
+
+    const previous = samples[index - 1] || null;
+    const next = samples[index + 1] || null;
+    const bridgingGapNm = previous && next ? distanceNm(previous, next) : null;
+    const shouldRename = Number.isFinite(bridgingGapNm) && bridgingGapNm > MAX_VISIBLE_GAP_NM;
+    const decision = shouldRename ? 'rename' : 'suppress';
+
+    console.info('[Takeoff duplicate card diagnostic]', {
+      airportCode: nearest.sample.code,
+      automaticReferenceCode: sample.code,
+      distanceNm: Number(nearest.distanceNm.toFixed(2)),
+      etaDifferenceMinutes: etaMinutesDifference(sample.pointEtaIso, nearest.sample.pointEtaIso),
+      airportCoordinates: {
+        lat: Number.isFinite(nearest.sample.lat) ? Number(nearest.sample.lat.toFixed(4)) : null,
+        lon: Number.isFinite(nearest.sample.lon) ? Number(nearest.sample.lon.toFixed(4)) : null
+      },
+      automaticCoordinates: {
+        lat: Number.isFinite(sample.lat) ? Number(sample.lat.toFixed(4)) : null,
+        lon: Number.isFinite(sample.lon) ? Number(sample.lon.toFixed(4)) : null
+      },
+      airportSource: nearest.sample.source,
+      automaticSource: sample.source,
+      decision
+    });
+
+    if (shouldRename) {
+      renameByIndex.set(index, `${sample.name} (ENROUTE)`);
+      return;
+    }
+
+    suppressedIndexes.add(index);
+  });
+
+  return samples
+    .map((sample, index) => ({ sample, index }))
+    .filter(item => !suppressedIndexes.has(item.index))
+    .map(item => ({
+      ...item.sample,
+      name: renameByIndex.get(item.index) || item.sample.name,
+      cardSampleIndex: item.index
+    }));
+}
+
 async function getBriefing() {
   $('formMessage').textContent = '';
   briefingButton.disabled = true;
@@ -244,6 +337,7 @@ async function getBriefing() {
       departureIso: forecastDate.toISOString(),
       cruiseSpeedKt: speed
     });
+    const visibleCardSamples = buildVisibleCardSamples(samples);
     logTerrainDiagnostics(samples);
     const distance = userRoute.length === 1 ? 0 : routeDistanceNm(userRoute);
     const etaMinutes = distance / speed * 60;
@@ -252,7 +346,7 @@ async function getBriefing() {
     renderBriefingHeader($('briefingHeader'), userRoute.map(p => p.name.toUpperCase()), distance, etaMinutes, samples,
       `${forecastDate.toLocaleDateString('en-NZ',{weekday:'long',day:'numeric',month:'short'}).toUpperCase()} • ${forecastDate.toLocaleTimeString('en-NZ',{hour:'2-digit',minute:'2-digit'})} NZT`);
     renderLimitingBanner($('limitingBanner'), samples, selectReference);
-    renderWeatherCards(weatherCards, samples, selectReference);
+    renderWeatherCards(weatherCards, visibleCardSamples, selectReference);
     renderRouteMap(userRoute, samples, selectReference);
     saveCurrent();
     briefingPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
