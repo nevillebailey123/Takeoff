@@ -22,13 +22,9 @@ const timePickerWheel = $('timePickerWheel');
 const timePickerCancel = $('timePickerCancel');
 const timePickerDone = $('timePickerDone');
 
-const TIME_STEP_MINUTES = 5;
-const TIME_VALUES = Array.from({ length: 24 * 60 / TIME_STEP_MINUTES }, (_, index) => {
-  const totalMinutes = index * TIME_STEP_MINUTES;
-  const hours = String(Math.floor(totalMinutes / 60)).padStart(2, '0');
-  const minutes = String(totalMinutes % 60).padStart(2, '0');
-  return `${hours}:${minutes}`;
-});
+const TIME_INTERVAL_MINUTES = 60;
+const TIME_INTERVAL_COUNT = 24;
+let TIME_VALUES = [];
 
 let savedPeriod = 'AM';
 let timePickerOriginalValue = '';
@@ -43,7 +39,7 @@ function formatTimeValue(totalMinutes) {
   return `${hours}:${minutes}`;
 }
 
-function nearestUpcomingTime(date = new Date()) {
+function refreshTimeValues(date = new Date()) {
   const parts = new Intl.DateTimeFormat('en-NZ', {
     timeZone: 'Pacific/Auckland',
     hour: '2-digit',
@@ -54,14 +50,17 @@ function nearestUpcomingTime(date = new Date()) {
   const minutePart = Number(parts.find(part => part.type === 'minute')?.value);
   const localHour = Number.isFinite(hourPart) ? hourPart : date.getHours();
   const localMinute = Number.isFinite(minutePart) ? minutePart : date.getMinutes();
-  const minutes = localHour * 60 + localMinute + 60;
-  return formatTimeValue(Math.round(minutes / TIME_STEP_MINUTES) * TIME_STEP_MINUTES);
+  const firstMinutes = localHour * 60 + localMinute + TIME_INTERVAL_MINUTES;
+  const firstHour = Math.ceil(firstMinutes / TIME_INTERVAL_MINUTES) * TIME_INTERVAL_MINUTES;
+  TIME_VALUES = [
+    formatTimeValue(firstMinutes),
+    ...Array.from({ length: TIME_INTERVAL_COUNT - 1 }, (_, index) => formatTimeValue(firstHour + (index * TIME_INTERVAL_MINUTES)))
+  ];
+  return TIME_VALUES;
 }
 
-function timeValueIndex(value) {
-  const match = String(value || '').match(/^(\d{2}):(\d{2})$/);
-  if (!match) return 0;
-  return (Number(match[1]) * 60 + Number(match[2])) / TIME_STEP_MINUTES;
+function nearestUpcomingTime(date = new Date()) {
+  return refreshTimeValues(date)[0];
 }
 
 function updateTimeDisplay(value) {
@@ -88,7 +87,7 @@ function commitSelectedTime() {
 }
 
 function buildTimeWheel() {
-  if (timeWheelBuilt) return;
+  refreshTimeValues();
   timePickerWheel.innerHTML = TIME_VALUES.map(value => `<button type="button" class="time-picker-option" data-value="${value}">${value}</button>`).join('');
   timePickerWheel.querySelectorAll('.time-picker-option').forEach(button => {
     button.addEventListener('click', () => setSelectedTime(button.dataset.value, { scrollIntoView: true }));
@@ -347,7 +346,7 @@ async function getBriefing() {
       `${forecastDate.toLocaleDateString('en-NZ',{weekday:'long',day:'numeric',month:'short'}).toUpperCase()} • ${forecastDate.toLocaleTimeString('en-NZ',{hour:'2-digit',minute:'2-digit'})} NZT`);
     renderLimitingBanner($('limitingBanner'), samples, selectReference);
     renderWeatherCards(weatherCards, visibleCardSamples, selectReference);
-    renderRouteMap(userRoute, samples, selectReference);
+    renderRouteMap(userRoute, samples, selectReference, forecastDate.toISOString());
     saveCurrent();
     briefingPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
   } catch (error) {

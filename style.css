@@ -74,6 +74,63 @@ input::placeholder { color: #607b99; }
 .card-poor { border-left-color: var(--poor); background: rgba(239,68,68,.055); }
 .card-unknown { border-left-color: var(--unknown); }
 .map-wrap { margin-top: 14px; }
+.map-tools {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.map-toggle,
+.map-lead {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 9px;
+  border-radius: 9px;
+  border: 1px solid var(--line);
+  background: var(--panel-soft);
+  color: var(--text);
+  font-size: 11px;
+  letter-spacing: .6px;
+  font-weight: 700;
+}
+.map-toggle input { margin: 0; accent-color: var(--accent); }
+.map-lead select {
+  min-width: 80px;
+  padding: 6px 8px;
+  border-radius: 7px;
+  border: 1px solid var(--line);
+  background: #0d2134;
+  color: var(--text);
+  font-size: 11px;
+}
+.map-refresh {
+  border: 1px solid #356181;
+  background: #12304d;
+  color: #d8ebff;
+  border-radius: 9px;
+  min-height: 34px;
+  padding: 0 12px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .7px;
+}
+.wind-overlay-glyph {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 32px;
+  padding: 1px 4px;
+  border-radius: 6px;
+  border: 1px solid rgba(4, 27, 44, .28);
+  background: rgba(255, 255, 255, .88);
+  color: #0b2f4a;
+  font-size: 11px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: .2px;
+}
 #routeMap { width: 100%; height: 720px; border-radius: 14px; overflow: hidden; background: #dfe7ee; }
 .route-marker { width: 16px; height: 16px; border-radius: 50%; border: 1px solid rgba(0,0,0,.75); box-shadow: 0 0 0 1px rgba(255,255,255,.5); }
 .route-marker.airport { box-shadow: 0 0 0 2px #fff, 0 0 0 4px rgba(255,255,255,.75); }
@@ -148,6 +205,7 @@ footer { color: #7890aa; font-size: 11px; text-align: center; padding: 6px 10px 
   .field-destination { grid-column: 3; grid-row: 1; }
   .reverse-button { grid-column: 2; grid-row: 1; }
   .route-secondary-row { grid-template-columns: 1.2fr 1fr .65fr; }
+  .map-tools { justify-content: flex-start; }
   #routeMap { height: 520px; }
   .time-picker-sheet { width: 100%; }
 }

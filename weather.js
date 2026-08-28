@@ -1019,13 +1019,15 @@ function parseCloudLayerToken(token) {
   if (!match) return null;
   return {
     cover: match[1],
-    baseHundredsFt: Number(match[2]),
+    base: Number(match[2]) * 100,
     token: `${match[1]}${match[2]}${match[3] || ''}`
   };
 }
 
 function cloudStateFromLayers(layers, { rawText = '' } = {}) {
-  const list = Array.isArray(layers) ? layers : [];
+  const list = (Array.isArray(layers) ? layers : [])
+    .map(layer => (typeof layer === 'string' ? parseCloudLayerToken(layer) : layer))
+    .filter(Boolean);
   const rawLayers = list
     .map(layer => {
       const cover = String(layer?.cover || '').trim().toUpperCase();
@@ -1300,7 +1302,6 @@ async function fetchTafs(icaoCodes) {
 }
 
 function selectTafForecastGroup(taf, forecastIso, { requireCoverage = false } = {}) {
-  const target = new Date(forecastIso).getTime() / 1000;
   const groups = Array.isArray(taf?.fcsts) ? taf.fcsts : [];
   if (!groups.length) return null;
 
@@ -1308,26 +1309,92 @@ function selectTafForecastGroup(taf, forecastIso, { requireCoverage = false } = 
     group,
     index,
     start: Number(group?.timeFrom),
-    end: Number(group?.timeTo)
+    end: Number(group?.timeTo),
+    type: String(group?.fcstChange || '').toUpperCase() || null
   }));
 
-  const matching = withBounds.filter(entry => Number.isFinite(target) && Number.isFinite(entry.start) && Number.isFinite(entry.end) && target >= entry.start && target < entry.end);
-  if (requireCoverage && !matching.length) return null;
-  const pool = matching.length ? matching : withBounds;
-  const precedence = { TEMPO: 0, PROB30: 1, PROB40: 1, FM: 2, BECMG: 3, null: 4, undefined: 4 };
+  return selectTafTimelineEntry(withBounds, forecastIso, { requireCoverage });
+}
 
-  return pool.sort((a, b) => {
-    const aType = String(a.group?.fcstChange || '').toUpperCase() || null;
-    const bType = String(b.group?.fcstChange || '').toUpperCase() || null;
-    const aPriority = precedence[aType] ?? 4;
-    const bPriority = precedence[bType] ?? 4;
-    if (aPriority !== bPriority) return aPriority - bPriority;
+function selectTafTimelineEntry(entries, forecastIso, { requireCoverage = false } = {}) {
+  const target = new Date(forecastIso).getTime() / 1000;
+  const withBounds = Array.isArray(entries) ? entries.filter(Boolean) : [];
+  if (!withBounds.length) return null;
 
-    const aSpan = Number.isFinite(a.start) && Number.isFinite(a.end) ? a.end - a.start : Number.POSITIVE_INFINITY;
-    const bSpan = Number.isFinite(b.start) && Number.isFinite(b.end) ? b.end - b.start : Number.POSITIVE_INFINITY;
-    if (aSpan !== bSpan) return aSpan - bSpan;
+  const sorted = [...withBounds].sort((a, b) => {
+    const aStart = Number.isFinite(a.start) ? a.start : Number.NEGATIVE_INFINITY;
+    const bStart = Number.isFinite(b.start) ? b.start : Number.NEGATIVE_INFINITY;
+    if (aStart !== bStart) return aStart - bStart;
     return a.index - b.index;
-  })[0] || null;
+  });
+
+  const matching = sorted.filter(entry => Number.isFinite(target) && Number.isFinite(entry.start) && Number.isFinite(entry.end) && target >= entry.start && target < entry.end);
+  if (requireCoverage && !matching.length) return null;
+
+  if (!Number.isFinite(target)) {
+    return sorted[0] || null;
+  }
+
+  const initial = sorted.find(entry => entry.type === 'INITIAL') || sorted[0] || null;
+  let prevailing = initial;
+
+  for (const entry of sorted) {
+    if (!Number.isFinite(entry.start)) continue;
+    if (entry.type === 'FM' && target >= entry.start) {
+      prevailing = entry;
+      continue;
+    }
+    if (entry.type === 'BECMG' && target >= entry.start) {
+      prevailing = entry;
+    }
+  }
+
+  if (matching.length) {
+    const precedence = { TEMPO: 0, PROB30: 1, PROB40: 1, FM: 2, BECMG: 3, INITIAL: 4, null: 5, undefined: 5 };
+    return matching.sort((a, b) => {
+      const aPriority = precedence[a.type] ?? 5;
+      const bPriority = precedence[b.type] ?? 5;
+      if (aPriority !== bPriority) return aPriority - bPriority;
+      const aSpan = Number.isFinite(a.start) && Number.isFinite(a.end) ? a.end - a.start : Number.POSITIVE_INFINITY;
+      const bSpan = Number.isFinite(b.start) && Number.isFinite(b.end) ? b.end - b.start : Number.POSITIVE_INFINITY;
+      if (aSpan !== bSpan) return aSpan - bSpan;
+      return a.index - b.index;
+    })[0] || prevailing;
+  }
+
+  return prevailing;
+}
+
+function selectParsedTafGroup(parsedTaf, forecastIso, options = {}) {
+  const groups = Array.isArray(parsedTaf?.groups)
+    ? parsedTaf.groups.filter(group => !['TEMPO', 'PROB30', 'PROB40', 'PROB30_TEMPO', 'PROB40_TEMPO'].includes(String(group?.type || '').toUpperCase()))
+    : [];
+  if (!groups.length) return null;
+
+  const withBounds = groups.map((group, index) => ({
+    group,
+    index,
+    start: parseIsoTimeMs(group?.startIso) != null ? parseIsoTimeMs(group.startIso) / 1000 : Number.NaN,
+    end: parseIsoTimeMs(group?.endIso) != null ? parseIsoTimeMs(group.endIso) / 1000 : Number.NaN,
+    type: String(group?.type || '').toUpperCase() || null
+  }));
+
+  return selectTafTimelineEntry(withBounds, forecastIso, options);
+}
+
+function buildParsedTafSelectionDiagnostics(parsedTaf, forecastIso, options = {}) {
+  const selected = selectParsedTafGroup(parsedTaf, forecastIso, options);
+  const group = selected?.group || null;
+  return {
+    targetIso: formatIsoUtc(forecastIso),
+    requireCoverage: Boolean(options.requireCoverage),
+    selectedIndex: selected?.index ?? null,
+    selectedType: group ? String(group.type || '').toUpperCase() : null,
+    selectedStartIso: group?.startIso || null,
+    selectedEndIso: group?.endIso || null,
+    matchingIndexes: selected ? [selected.index] : [],
+    rejected: []
+  };
 }
 
 function findNearestReportingAirport(point, reportingAirports) {
@@ -1507,24 +1574,53 @@ function buildMetarAirportWeather(metar, point) {
 
 function buildTafAirportWeather(taf, point, forecastIso, options = {}) {
   const terrainElevationFt = Number.isFinite(point.elevationFt) ? point.elevationFt : null;
-  const selected = selectTafForecastGroup(taf, forecastIso, options);
-  if (!selected?.group) return null;
-
-  const cloud = parseTafCloudInfo(selected.group.clouds, taf.rawTAF || '');
-  const cavokReported = cloud.display === 'CAVOK';
-  const visibility = cavokReported
-    ? { km: 10, text: '≥10 KM' }
-    : parseVisibilityKm(null, selected.group.visib);
-  const cloudState = buildAirportCloudState(cloud, terrainElevationFt);
   const parsedRaw = parseTafGroupsFromRaw(
     taf.rawTAF || '',
     taf.issueTime || taf.bulletinTime || forecastIso,
     timestampSecondsToIso(taf.fcsts?.[0]?.timeFrom),
     timestampSecondsToIso(taf.fcsts?.[0]?.timeTo)
   );
-  const selectionDiagnostics = buildTafSelectionDiagnostics(taf, forecastIso, options);
-  const selectedGroupStartIso = timestampSecondsToIso(selected.group.timeFrom);
-  const selectedGroupEndIso = timestampSecondsToIso(selected.group.timeTo);
+  const parsedSelected = selectParsedTafGroup(parsedRaw, forecastIso, options);
+  const fallbackSelected = selectTafForecastGroup(taf, forecastIso, options);
+  const selected = parsedSelected || fallbackSelected;
+  if (!selected?.group) return null;
+
+  const usingParsedGroup = Boolean(parsedSelected?.group);
+  const selectedGroup = selected.group;
+  const selectedGroupType = usingParsedGroup
+    ? String(selectedGroup.type || '').toUpperCase()
+    : (selectedGroup.fcstChange ? String(selectedGroup.fcstChange).toUpperCase() : 'PREVAILING');
+  const selectedGroupStartIso = usingParsedGroup
+    ? selectedGroup.startIso || null
+    : timestampSecondsToIso(selectedGroup.timeFrom);
+  const selectedGroupEndIso = usingParsedGroup
+    ? selectedGroup.endIso || null
+    : timestampSecondsToIso(selectedGroup.timeTo);
+  const selectedCloudLayers = usingParsedGroup
+    ? (Array.isArray(selectedGroup.cloud) ? selectedGroup.cloud : Array.isArray(selectedGroup.clouds) ? selectedGroup.clouds : [])
+    : (Array.isArray(selectedGroup.clouds) ? selectedGroup.clouds : Array.isArray(selectedGroup.cloud) ? selectedGroup.cloud : []);
+
+  const cloud = usingParsedGroup
+    ? parseTafCloudInfo(selectedCloudLayers, selectedGroup.rawText || taf.rawTAF || '')
+    : parseTafCloudInfo(selectedCloudLayers, taf.rawTAF || '');
+  const cavokReported = cloud.display === 'CAVOK';
+  const visibility = cavokReported
+    ? { km: 10, text: '≥10 KM' }
+    : usingParsedGroup
+      ? parseVisibilityKm(selectedGroup.rawText || '', selectedGroup.visibility)
+      : parseVisibilityKm(null, selectedGroup.visib);
+  const cloudState = buildAirportCloudState(cloud, terrainElevationFt);
+  const selectionDiagnostics = parsedSelected
+    ? buildParsedTafSelectionDiagnostics(parsedRaw, forecastIso, options)
+    : buildTafSelectionDiagnostics(taf, forecastIso, options);
+  const wind = usingParsedGroup
+    ? parseWindToken(selectedGroup.rawText || selectedGroup.wind || '')
+    : {
+        windKt: Number.isFinite(selectedGroup.wspd) ? Math.round(selectedGroup.wspd) : null,
+        windDirection: Number.isFinite(selectedGroup.wdir) ? Math.round(selectedGroup.wdir) : null,
+        gustKt: Number.isFinite(selectedGroup.wgst) ? Math.round(selectedGroup.wgst) : null,
+        text: formatWindText(selectedGroup.wdir, selectedGroup.wspd, selectedGroup.wgst)
+      };
   const etaInsideSelectedGroup = Boolean(
     selectedGroupStartIso
     && selectedGroupEndIso
@@ -1534,20 +1630,22 @@ function buildTafAirportWeather(taf, point, forecastIso, options = {}) {
 
   return {
     source: 'TAF',
-    tafGroup: selected.group.fcstChange ? String(selected.group.fcstChange).toUpperCase() : 'PREVAILING',
-    forecastTime: Number.isFinite(selected.group.timeFrom) ? new Date(selected.group.timeFrom * 1000).toISOString() : taf.issueTime || taf.bulletinTime || null,
+    tafGroup: selectedGroupType && selectedGroupType !== 'INITIAL' ? selectedGroupType : 'PREVAILING',
+    forecastTime: usingParsedGroup
+      ? selectedGroupStartIso || taf.issueTime || taf.bulletinTime || null
+      : (Number.isFinite(selectedGroup.timeFrom) ? new Date(selectedGroup.timeFrom * 1000).toISOString() : taf.issueTime || taf.bulletinTime || null),
     ...cloudState,
     visibilityKm: visibility.km,
     visibilityText: visibility.text,
     precipitationMm: null,
     weatherCode: null,
-    windKt: Number.isFinite(selected.group.wspd) ? Math.round(selected.group.wspd) : null,
-    windDirection: Number.isFinite(selected.group.wdir) ? Math.round(selected.group.wdir) : null,
-    gustKt: Number.isFinite(selected.group.wgst) ? Math.round(selected.group.wgst) : null,
-    windText: formatWindText(selected.group.wdir, selected.group.wspd, selected.group.wgst),
+    windKt: wind.windKt,
+    windDirection: wind.windDirection,
+    gustKt: wind.gustKt,
+    windText: wind.text,
     metarTempC: null,
     metarDewPointC: null,
-    metarQnhHpa: Number.isFinite(selected.group.altim) ? Math.round(selected.group.altim) : null,
+    metarQnhHpa: usingParsedGroup ? null : (Number.isFinite(selectedGroup.altim) ? Math.round(selectedGroup.altim) : null),
     metarObsTime: null,
     metarRaw: taf.rawTAF || '',
     cavokReported,
@@ -1561,14 +1659,14 @@ function buildTafAirportWeather(taf, point, forecastIso, options = {}) {
       parserGroups: parsedRaw.groups,
       selection: selectionDiagnostics,
       selectedGroup: {
-        type: selected.group.fcstChange ? String(selected.group.fcstChange).toUpperCase() : 'PREVAILING',
+        type: selectedGroupType,
         startIso: selectedGroupStartIso,
         endIso: selectedGroupEndIso,
-        windKt: Number.isFinite(selected.group.wspd) ? Math.round(selected.group.wspd) : null,
-        windDirection: Number.isFinite(selected.group.wdir) ? Math.round(selected.group.wdir) : null,
-        gustKt: Number.isFinite(selected.group.wgst) ? Math.round(selected.group.wgst) : null,
-        visibility: selected.group.visib || null,
-        clouds: Array.isArray(selected.group.clouds) ? selected.group.clouds : []
+        windKt: wind.windKt,
+        windDirection: wind.windDirection,
+        gustKt: wind.gustKt,
+        visibility: usingParsedGroup ? selectedGroup.visibility || null : selectedGroup.visib || null,
+        clouds: selectedCloudLayers
       },
       etaIso: formatIsoUtc(forecastIso),
       etaNzt: formatIsoNzt(forecastIso),

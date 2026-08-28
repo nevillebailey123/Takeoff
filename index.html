@@ -86,7 +86,21 @@
         <div id="limitingBanner"></div>
         <div id="weatherCards" class="weather-cards" aria-label="Route weather summaries"></div>
         <div class="map-wrap">
-          <div class="map-title-row"><h2>ROUTE MAP</h2><span id="mapStatus"></span></div>
+          <div class="map-title-row">
+            <h2>ROUTE MAP</h2>
+            <div class="map-tools" role="group" aria-label="Map overlays">
+              <label class="map-toggle" for="metvuwToggle">
+                <input id="metvuwToggle" type="checkbox">
+                <span>WIND + RAIN</span>
+              </label>
+              <label class="map-lead" for="metvuwLead">
+                <span>DENSITY</span>
+                <select id="metvuwLead" aria-label="Wind and rain overlay density"></select>
+              </label>
+              <button id="metvuwRefresh" class="map-refresh" type="button">REFRESH</button>
+              <span id="mapStatus" aria-live="polite"></span>
+            </div>
+          </div>
           <div id="routeMap" aria-label="Interactive route map"></div>
         </div>
       </section>

@@ -30,7 +30,7 @@ function logRenderedTafCardDiagnostic(sample, rendered) {
     displayedEqualsSample: {
       cloud: rendered.cloud === `Cloud ${stringifyValue(formatCloud(sample, { surface: 'card' }).replace(/^Cloud\s+/, ''))}` || rendered.cloud === formatCloud(sample, { surface: 'card' }),
       visibility: rendered.visibility === (sample.cavokReported ? '≥10 KM' : (sample.visibilityText || (Number.isFinite(sample.visibilityKm) ? `${Math.round(sample.visibilityKm)} KM` : '—'))),
-      wind: rendered.wind === (sample.source === 'METAR' && sample.windText ? sample.windText : `${String(sample.windDirection).padStart(3, '0')}/${sample.windKt}${sample.gustKt > sample.windKt ? ` G${sample.gustKt}` : ''}`),
+      wind: rendered.wind === ((sample.windText && sample.windText !== '—') ? sample.windText : `${String(sample.windDirection).padStart(3, '0')}/${sample.windKt}${sample.gustKt > sample.windKt ? ` G${sample.gustKt}` : ''}`),
       rain: rendered.rain === (sample.precipitationMm > .2 ? `${sample.precipitationMm.toFixed(1)} MM` : 'NIL'),
       sourceLabel: rendered.source === (sample.sourceLabel || sample.source || 'Forecast')
     },
@@ -116,6 +116,20 @@ function logRenderedTafCardDiagnostic(sample, rendered) {
   });
 }
 
+function formatTafComments(sample) {
+  if (sample?.source !== 'TAF') return '';
+  const groups = Array.isArray(sample?.tafDiagnostics?.parserGroups) ? sample.tafDiagnostics.parserGroups : [];
+  const weatherTokens = [...new Set(groups
+    .filter(group => {
+      const type = String(group?.type || '').toUpperCase();
+      return ['TEMPO', 'PROB30', 'PROB40', 'PROB30_TEMPO', 'PROB40_TEMPO'].includes(type);
+    })
+    .flatMap(group => Array.isArray(group?.weather) ? group.weather.filter(Boolean) : [])
+  )];
+
+  return weatherTokens.length ? `Comments: TEMPO/PROB ${weatherTokens.join(', ')}` : '';
+}
+
 export function populateDaySelect(select) {
   select.innerHTML = '';
   const now = new Date();
@@ -168,11 +182,12 @@ export function renderWeatherCards(container, samples, onSelect) {
         : Number.isFinite(sample.visibilityKm)
           ? (sample.visibilityKm >= 20 ? '>20 KM' : `${Math.round(sample.visibilityKm)} KM`)
           : '—';
-    const wind = sample.source === 'METAR' && sample.windText
+    const wind = (sample.windText && sample.windText !== '—')
       ? sample.windText
       : `${String(sample.windDirection).padStart(3,'0')}/${sample.windKt}${sample.gustKt > sample.windKt ? ` G${sample.gustKt}` : ''}`;
     const rain = sample.precipitationMm > .2 ? `${sample.precipitationMm.toFixed(1)} MM` : 'NIL';
     const source = sample.sourceLabel || sample.source || 'Forecast';
+    const comments = formatTafComments(sample);
     if (sample.source === 'TAF' && /^TAF\s+[A-Z]{4}\b/.test(String(source))) {
       logRenderedTafCardDiagnostic(sample, {
         cloud,
@@ -193,6 +208,7 @@ export function renderWeatherCards(container, samples, onSelect) {
       <div class="weather-row"><span>👁</span><strong>${visibility}</strong></div>
       <div class="weather-row"><span>💨</span><strong>${wind}</strong></div>
       <div class="weather-row"><span>🌧</span><strong>${rain}</strong></div>
+      ${comments ? `<div class="weather-row"><span>✎</span><strong>${comments}</strong></div>` : ''}
       ${metarRows}
       <div class="weather-row"><span>ⓘ</span><strong>${source}</strong></div>
     </button>`;
