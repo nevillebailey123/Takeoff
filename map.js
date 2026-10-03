@@ -291,18 +291,11 @@ function ensureMap() {
   windRainPane.style.zIndex = '350';
   windRainPane.style.pointerEvents = 'none';
 
-  const primaryTiles = L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
-    attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
-    subdomains: 'abcd',
-    maxZoom: 20
+  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+    maxZoom: 19
   }).addTo(map);
 
-  let fallbackLoaded = false;
-  primaryTiles.on('tileerror', () => {
-    if (fallbackLoaded) return;
-    fallbackLoaded = true;
-    primaryTiles.setUrl('https://{s}.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png');
-  });
   layerGroup = L.layerGroup().addTo(map);
   bindMapControls();
   return map;
