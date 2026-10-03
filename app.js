@@ -3,7 +3,7 @@ import { buildRouteReferences, routeDistanceNm, distanceNm } from './routeRefere
 import { fetchRouteWeather } from './weather.js';
 import { getTerrainElevation } from './terrain.js';
 import { saveFlight, loadFlight } from './storage.js';
-import { renderRouteMap, highlightMarker } from './map.js';
+import { renderRouteMap, highlightMarker } from './map.js?v=20261003-osm';
 import { populateDaySelect, renderBriefingHeader, renderLimitingBanner, renderWeatherCards, highlightCard } from './ui.js';
 
 const $ = id => document.getElementById(id);
